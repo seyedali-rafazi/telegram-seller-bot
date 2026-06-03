@@ -1,33 +1,18 @@
 # handlers/vpn/callbacks.py
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from core.i18n import t
-from core.keyboards import (
-    get_main_menu_keyboard,
-    get_confirm_purchase_keyboard,
-)
+from core.constants import ADMIN_ID
+from core.messages import msg
+from core.keyboards import get_main_menu_keyboard, get_confirm_purchase_keyboard
 from core.database import (
-    get_user_language,
     is_user_banned,
-    set_user_language,
     get_plan,
     get_wallet_balance,
-    purchase_plan,
+    create_purchase_order,
 )
-async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    uid = str(query.message.chat_id)
-    lang = "fa" if query.data == "lang_fa" else "en"
-    await set_user_language(uid, lang)
-    await query.edit_message_text(t(lang, "lang_set"))
-    await context.bot.send_message(
-        chat_id=uid,
-        text=t(lang, "welcome"),
-        reply_markup=get_main_menu_keyboard(lang),
-    )
+from core.database.users import get_user_info
 
 
 async def plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,72 +22,112 @@ async def plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if await is_user_banned(uid):
         return
 
-    lang = await get_user_language(uid)
     plan_id = int(query.data.replace("plan_", ""))
     plan = await get_plan(plan_id)
     if not plan or plan[5] != 1:
-        await query.edit_message_text(t(lang, "no_plans"))
+        await query.edit_message_text(msg("no_plans"))
         return
 
     _, name, _, _, price, _ = plan
     balance = await get_wallet_balance(uid)
     await query.edit_message_text(
-        t(lang, "confirm_buy", name=name, price=price, balance=balance),
-        reply_markup=get_confirm_purchase_keyboard(plan_id, lang),
+        msg("confirm_buy", name=name, price=price, balance=balance),
+        reply_markup=get_confirm_purchase_keyboard(plan_id),
     )
+
+
+async def _notify_admin_new_order(context, order_id, uid, name, price, duration_days, data_gb):
+    if not ADMIN_ID:
+        return
+    info = await get_user_info(uid)
+    uname = info[0] if info else "—"
+    text = (
+        f"🛒 سفارش جدید #{order_id}\n\n"
+        f"👤 کاربر: {uid} (@{uname})\n"
+        f"📦 پلن: {name}\n"
+        f"⏱ {duration_days} روز | 📊 {data_gb} گیگ\n"
+        f"💰 {price:,} تومان"
+    )
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ تأیید — ارسال کانفیگ",
+                    callback_data=f"order_ok_{order_id}",
+                )
+            ],
+            [InlineKeyboardButton("❌ رد سفارش", callback_data=f"order_no_{order_id}")],
+        ]
+    )
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=text,
+            reply_markup=kb,
+        )
+    except Exception:
+        pass
 
 
 async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = str(query.message.chat_id)
-    lang = await get_user_language(uid)
 
     if query.data == "buy_cancel":
-        await query.edit_message_text(t(lang, "welcome"))
+        await query.edit_message_text(msg("welcome"))
         return
 
     plan_id = int(query.data.replace("buy_confirm_", ""))
     plan = await get_plan(plan_id)
     if not plan:
-        await query.edit_message_text(t(lang, "no_plans"))
+        await query.edit_message_text(msg("no_plans"))
         return
 
     _, name, _, _, price, _ = plan
     balance = await get_wallet_balance(uid)
 
-    ok, reason, extra = await purchase_plan(uid, plan_id)
+    ok, reason, extra = await create_purchase_order(uid, plan_id)
     if not ok:
         if reason == "insufficient_balance":
             await query.edit_message_text(
-                t(lang, "insufficient_balance", price=price, balance=balance)
+                msg(
+                    "insufficient_balance",
+                    price=extra["price"] if extra else price,
+                    balance=extra["balance"] if extra else balance,
+                )
             )
-        elif reason == "no_config":
-            await query.edit_message_text(t(lang, "no_configs"))
         else:
-            await query.edit_message_text(t(lang, "no_plans"))
+            await query.edit_message_text(msg("no_plans"))
         return
 
-    await query.edit_message_text("✅")
+    await query.edit_message_text(
+        msg(
+            "order_submitted",
+            order_id=extra["order_id"],
+            name=extra["name"],
+            price=extra["price"],
+        )
+    )
     await context.bot.send_message(
         chat_id=uid,
-        text=t(
-            lang,
-            "purchase_ok",
-            name=extra["name"],
-            expires=extra["expires"],
-            config=extra["config"],
-        ),
-        parse_mode="Markdown",
-        reply_markup=get_main_menu_keyboard(lang),
+        text=msg("welcome"),
+        reply_markup=get_main_menu_keyboard(),
+    )
+    await _notify_admin_new_order(
+        context,
+        extra["order_id"],
+        uid,
+        extra["name"],
+        extra["price"],
+        extra["duration_days"],
+        extra["data_gb"],
     )
 
 
 async def user_callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
-    if data.startswith("lang_"):
-        await language_callback(update, context)
-    elif data.startswith("plan_"):
+    if data.startswith("plan_"):
         await plan_select_callback(update, context)
     elif data.startswith("buy_confirm_") or data == "buy_cancel":
         await buy_confirm_callback(update, context)

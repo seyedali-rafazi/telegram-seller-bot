@@ -17,11 +17,17 @@ from core.constants import (
     STATE_ADMIN_PLAN_GB,
     STATE_ADMIN_PLAN_PRICE,
     STATE_ADMIN_USER_BALANCE,
+    STATE_ADMIN_ORDER_CONFIG,
 )
 from core.database import (
     get_total_users,
     count_pending_payments,
+    count_pending_orders,
+    get_pending_orders,
     get_pending_payments,
+    get_order,
+    reject_purchase_order,
+    fulfill_purchase_order,
     get_all_plans,
     count_available_configs,
     count_total_configs,
@@ -40,6 +46,8 @@ from core.database import (
     get_wallet_balance,
 )
 from core.database.users import get_user_info
+from core.formatting import msg_e
+from core.messages import msg
 
 
 def is_admin(update: Update) -> bool:
@@ -49,12 +57,14 @@ def is_admin(update: Update) -> bool:
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
-    pending = await count_pending_payments()
+    pending_pay = await count_pending_payments()
+    pending_ord = await count_pending_orders()
     avail = await count_available_configs()
     await update.message.reply_text(
         f"🛠 **پنل ادمین**\n\n"
-        f"پرداخت‌های در انتظار: {pending}\n"
-        f"کانفیگ آماده: {avail}\n\n"
+        f"پرداخت‌های در انتظار: {pending_pay}\n"
+        f"سفارش‌های در انتظار: {pending_ord}\n"
+        f"کانفیگ در انبار: {avail}\n\n"
         "گزینه را انتخاب کنید:",
         parse_mode="Markdown",
         reply_markup=get_admin_menu_keyboard(),
@@ -72,15 +82,29 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "adm_stats":
         total = await get_total_users()
-        pending = await count_pending_payments()
+        pending_pay = await count_pending_payments()
+        pending_ord = await count_pending_orders()
         avail = await count_available_configs()
         total_cfg = await count_total_configs()
         await query.edit_message_text(
             f"📊 آمار\n\n"
             f"کاربران: {total}\n"
-            f"پرداخت معلق: {pending}\n"
+            f"پرداخت معلق: {pending_pay}\n"
+            f"سفارش معلق: {pending_ord}\n"
             f"کانفیگ: {avail} آزاد / {total_cfg} کل"
         )
+        return
+
+    if data == "adm_orders":
+        rows = await get_pending_orders(15)
+        if not rows:
+            await query.edit_message_text("✅ سفارش معلقی نیست.")
+            return
+        lines = ["🛒 **سفارش‌های در انتظار:**\n"]
+        for r in rows:
+            lines.append(f"#{r[0]} — کاربر {r[1]} — {r[2]:,}ت — {r[4]}")
+        lines.append("\nروی «تأیید» در پیام سفارش بزنید، سپس لینک VPN را بفرستید.")
+        await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
         return
 
     if data == "adm_payments":
@@ -126,7 +150,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "adm_addplan":
         set_state(ADMIN_ID, STATE_ADMIN_PLAN_NAME)
-        await query.edit_message_text("نام پلن را ارسال کنید (مثال: 1 Month - 30GB):")
+        await query.edit_message_text("نام پلن را ارسال کنید (مثال: یک ماهه ۳۰ گیگ):")
         return
 
     if data.startswith("adm_delplan_"):
@@ -181,12 +205,50 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "adm_back":
         clear_state(ADMIN_ID)
-        pending = await count_pending_payments()
+        pending_pay = await count_pending_payments()
+        pending_ord = await count_pending_orders()
         avail = await count_available_configs()
         await query.edit_message_text(
-            f"🛠 پنل ادمین\nپرداخت معلق: {pending} | کانفیگ: {avail}",
+            f"🛠 پنل ادمین\nپرداخت: {pending_pay} | سفارش: {pending_ord} | کانفیگ: {avail}",
             reply_markup=get_admin_menu_keyboard(),
         )
+        return
+
+    if data.startswith("order_ok_"):
+        order_id = int(data.replace("order_ok_", ""))
+        order = await get_order(order_id)
+        if not order or order["status"] != "pending":
+            await query.answer("سفارش یافت نشد یا قبلاً بررسی شده", show_alert=True)
+            return
+        set_state(ADMIN_ID, STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
+        base = query.message.text or ""
+        await query.edit_message_text(
+            base + f"\n\n⏳ لینک VPN سفارش #{order_id} را در **پیام بعدی** ارسال کنید.\n"
+            "(چند خط = چند لینک در یک پیام)",
+            parse_mode="Markdown",
+            reply_markup=None,
+        )
+        return
+
+    if data.startswith("order_no_"):
+        order_id = int(data.replace("order_no_", ""))
+        order = await get_order(order_id)
+        ok = await reject_purchase_order(order_id)
+        if ok and order:
+            base = query.message.text or ""
+            await query.edit_message_text(
+                base + "\n\n❌ سفارش رد شد.",
+                reply_markup=None,
+            )
+            try:
+                await context.bot.send_message(
+                    chat_id=order["user_id"],
+                    text=msg("order_rejected_user", order_id=order_id),
+                )
+            except Exception:
+                pass
+        else:
+            await query.answer("خطا یا قبلاً بررسی شده", show_alert=True)
         return
 
     if data.startswith("adm_wallet_"):
@@ -327,6 +389,42 @@ async def process_admin_state(
             state["plan_name"], state["days"], state["data_gb"], int(text)
         )
         await update.message.reply_text(f"✅ پلن #{pid} ایجاد شد.")
+        return True
+
+    if step == STATE_ADMIN_ORDER_CONFIG:
+        order_id = state.get("order_id")
+        clear_state(ADMIN_ID)
+        ok, reason, extra = await fulfill_purchase_order(order_id, text)
+        if not ok:
+            if reason == "insufficient_balance":
+                await update.message.reply_text(
+                    f"❌ موجودی کاربر {extra['user_id']} کافی نیست "
+                    f"({extra['price']:,} تومان). کیف پول را بررسی کنید."
+                )
+            elif reason == "invalid_config":
+                await update.message.reply_text("❌ لینک کانفیگ خیلی کوتاه است.")
+            else:
+                await update.message.reply_text(f"❌ خطا: {reason}")
+            return True
+
+        user_id = extra["user_id"]
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=msg_e(
+                    "order_approved_user",
+                    order_id=order_id,
+                    name=extra["name"],
+                    expires=extra["expires"],
+                    config=extra["config"],
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        await update.message.reply_text(
+            f"✅ سفارش #{order_id} تکمیل شد و کانفیگ برای کاربر {user_id} ارسال شد."
+        )
         return True
 
     if step == STATE_ADMIN_USER_BALANCE:

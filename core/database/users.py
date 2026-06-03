@@ -27,26 +27,6 @@ async def add_user(user_id, username):
     await conn.commit()
 
 
-async def get_user_language(user_id: str) -> str:
-    conn = await get_db()
-    async with conn.execute(
-        "SELECT language FROM users WHERE user_id = ?", (user_id,)
-    ) as cursor:
-        row = await cursor.fetchone()
-        if row and row[0]:
-            return row[0]
-    return "fa"
-
-
-async def set_user_language(user_id: str, language: str):
-    conn = await get_db()
-    await conn.execute(
-        "UPDATE users SET language = ? WHERE user_id = ?",
-        (language, user_id),
-    )
-    await conn.commit()
-
-
 async def is_user_banned(user_id: str) -> bool:
     conn = await get_db()
     async with conn.execute(

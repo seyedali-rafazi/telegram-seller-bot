@@ -82,6 +82,32 @@ async def init_vpn_tables():
         ON vpn_configs(is_assigned)
     """)
 
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            plan_id INTEGER NOT NULL,
+            amount INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            config_text TEXT,
+            admin_note TEXT,
+            created_at TEXT,
+            reviewed_at TEXT,
+            FOREIGN KEY (plan_id) REFERENCES vpn_plans(id)
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_purchase_orders_status
+        ON purchase_orders(status)
+    """)
+
+    async with conn.execute("PRAGMA table_info(user_subscriptions)") as cursor:
+        sub_columns = [column[1] for column in await cursor.fetchall()]
+    if "config_text" not in sub_columns:
+        await conn.execute(
+            "ALTER TABLE user_subscriptions ADD COLUMN config_text TEXT"
+        )
+
     now = get_tehran_now_full()
     async with conn.execute("SELECT COUNT(*) FROM vpn_plans") as cursor:
         count = (await cursor.fetchone())[0]

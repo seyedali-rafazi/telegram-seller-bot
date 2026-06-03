@@ -2,18 +2,14 @@
 
 import os
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from dotenv import load_dotenv
 
 from core.state_manager import clear_state
-from core.keyboards import get_main_menu_keyboard, get_language_keyboard
-from core.i18n import t
-from core.database import (
-    add_user,
-    get_user_language,
-    is_user_banned,
-)
+from core.keyboards import get_main_menu_keyboard
+from core.messages import msg
+from core.database import add_user, is_user_banned
 
 load_dotenv()
 CHANNEL_ID = os.getenv("CHANNEL_ID")
@@ -32,17 +28,10 @@ async def check_membership(bot, user_id):
     return False
 
 
-async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str | None = None):
-    chat_id = str(update.effective_chat.id)
-    if lang is None:
-        lang = await get_user_language(chat_id)
+async def send_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        t(lang, "welcome"),
-        reply_markup=get_main_menu_keyboard(lang),
-    )
-    await update.message.reply_text(
-        t(lang, "choose_lang"),
-        reply_markup=get_language_keyboard(),
+        msg("welcome"),
+        reply_markup=get_main_menu_keyboard(),
     )
 
 
@@ -53,17 +42,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await add_user(chat_id, username)
 
     if await is_user_banned(chat_id):
-        lang = await get_user_language(chat_id)
-        await update.message.reply_text(t(lang, "banned"))
+        await update.message.reply_text(msg("banned"))
         return
 
     is_member = await check_membership(context.bot, chat_id)
     if not is_member:
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-        keyboard = [[InlineKeyboardButton("📢 Join channel", url=CHANNEL_URL)]]
+        keyboard = [
+            [InlineKeyboardButton(msg("join_channel_btn"), url=CHANNEL_URL)]
+        ]
         await update.message.reply_text(
-            "🛑 Please join our channel first, then send /start again.",
+            msg("channel_required"),
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
         return

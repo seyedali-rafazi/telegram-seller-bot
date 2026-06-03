@@ -6,63 +6,45 @@ from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
-from core.i18n import t
+from core.constants import BTN_BUY, BTN_ACCOUNT, BTN_WALLET, BTN_SUPPORT, BTN_BACK, SUPPORT_URL
+from core.messages import msg
 
 
-def get_main_menu_keyboard(lang: str = "fa"):
+def get_main_menu_keyboard():
     keyboard = [
-        [KeyboardButton(t(lang, "btn_buy")), KeyboardButton(t(lang, "btn_account"))],
-        [KeyboardButton(t(lang, "btn_wallet")), KeyboardButton(t(lang, "btn_support"))],
+        [KeyboardButton(BTN_BUY), KeyboardButton(BTN_ACCOUNT)],
+        [KeyboardButton(BTN_WALLET), KeyboardButton(BTN_SUPPORT)],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
-def get_back_keyboard(lang: str = "fa"):
-    return ReplyKeyboardMarkup(
-        [[KeyboardButton(t(lang, "btn_back"))]], resize_keyboard=True
-    )
+def get_back_keyboard():
+    return ReplyKeyboardMarkup([[KeyboardButton(BTN_BACK)]], resize_keyboard=True)
 
 
-def get_language_keyboard():
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("🇮🇷 فارسی", callback_data="lang_fa"),
-                InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
-            ]
-        ]
-    )
-
-
-def get_plans_keyboard(plans, lang: str = "fa"):
+def get_plans_keyboard(plans):
     rows = []
     for plan in plans:
         pid, name, days, gb, price = plan[0], plan[1], plan[2], plan[3], plan[4]
-        label = t(lang, "plan_item", name=name, days=days, gb=gb, price=price)
+        label = msg("plan_item", name=name, days=days, gb=gb, price=price)
         rows.append([InlineKeyboardButton(label[:60], callback_data=f"plan_{pid}")])
     return InlineKeyboardMarkup(rows)
 
 
-def get_confirm_purchase_keyboard(plan_id: int, lang: str = "fa"):
-    yes = "✅ تأیید" if lang == "fa" else "✅ Confirm"
-    no = "❌ انصراف" if lang == "fa" else "❌ Cancel"
+def get_confirm_purchase_keyboard(plan_id: int):
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(yes, callback_data=f"buy_confirm_{plan_id}"),
-                InlineKeyboardButton(no, callback_data="buy_cancel"),
+                InlineKeyboardButton("✅ تأیید", callback_data=f"buy_confirm_{plan_id}"),
+                InlineKeyboardButton("❌ انصراف", callback_data="buy_cancel"),
             ]
         ]
     )
 
 
-def get_support_keyboard(lang: str = "fa"):
-    from core.constants import SUPPORT_URL
-
+def get_support_keyboard():
     return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton(t(lang, "contact_admin"), url=SUPPORT_URL)],
-        ]
+        [[InlineKeyboardButton(msg("contact_admin"), url=SUPPORT_URL)]]
     )
 
 
@@ -71,9 +53,8 @@ def get_admin_menu_keyboard():
         [
             [InlineKeyboardButton("👥 کاربران", callback_data="adm_users")],
             [
-                InlineKeyboardButton(
-                    "💳 تأیید پرداخت‌ها", callback_data="adm_payments"
-                )
+                InlineKeyboardButton("💳 تأیید پرداخت‌ها", callback_data="adm_payments"),
+                InlineKeyboardButton("🛒 سفارش‌ها", callback_data="adm_orders"),
             ],
             [InlineKeyboardButton("📦 مدیریت پلن‌ها", callback_data="adm_plans")],
             [InlineKeyboardButton("🔗 کانفیگ‌ها", callback_data="adm_configs")],

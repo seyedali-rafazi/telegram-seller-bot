@@ -21,13 +21,13 @@ def register_all_handlers(application):
     application.add_handler(
         CallbackQueryHandler(
             user_callback_router,
-            pattern=r"^(lang_|plan_|buy_confirm_|buy_cancel)",
+            pattern=r"^(plan_|buy_confirm_|buy_cancel)",
         )
     )
     application.add_handler(
         CallbackQueryHandler(
             admin_callback,
-            pattern=r"^(adm_|pay_ok_|pay_no_)",
+            pattern=r"^(adm_|pay_ok_|pay_no_|order_ok_|order_no_)",
         )
     )
 
