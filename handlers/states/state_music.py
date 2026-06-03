@@ -1,0 +1,481 @@
+# handlers/states/state_music.py
+
+
+import os
+import asyncio
+import uuid
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.error import BadRequest
+from telegram.ext import ContextTypes
+
+from core.database import (
+    is_vip,
+    get_music_downloads,
+    increment_music_downloads,
+)
+from services.music import (
+    search_track,
+    search_album,
+    search_artist,
+    search_playlist,
+    get_album_tracks,
+    get_playlist_tracks,
+    get_artist_top_tracks,
+)
+from services.music_identify import (
+    IDENTIFY_DIR,
+    MAX_DURATION_SEC,
+    extract_audio_to_mp3,
+    format_duration_fa,
+    format_identified_info_message,
+    get_api_duration_sec,
+    get_message_media,
+    probe_media_duration_sec,
+    recognize_music_from_file,
+)
+from services.youtube import download_youtube_audio
+
+# صف دانلود برای جلوگیری از فشار به سرور و محدودیت‌های یوتیوب
+MAX_MUSIC_CONCURRENT = 3
+music_download_semaphore = asyncio.Semaphore(MAX_MUSIC_CONCURRENT)
+
+
+async def background_download_task(
+    context,
+    chat_id,
+    track_id,
+    title,
+    performer,
+    safe_filename,
+):
+    status_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text="⏳ درخواست شما در صف دانلود قرار گرفت.\nلطفاً شکیبا باشید...",
+    )
+
+    file_path = None  # برای استفاده در بلاک finally
+
+    try:
+        # قفل صف (فقط 3 دانلود همزمان انجام می‌شود)
+        async with music_download_semaphore:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=status_msg.message_id,
+                    text="⏳ نوبت شما رسید! در حال دانلود...",
+                )
+            except BadRequest:
+                pass
+
+            # دانلود در ترد جداگانه
+            file_path = await asyncio.to_thread(download_youtube_audio, track_id)
+
+            if file_path and os.path.exists(file_path):
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=status_msg.message_id,
+                        text="📤 دانلود تکمیل شد! در حال ارسال...",
+                    )
+                except BadRequest:
+                    pass
+
+                await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=file_path,
+                    title=title,
+                    performer=performer,
+                    filename=f"{safe_filename}.mp3",
+                    read_timeout=120,
+                    write_timeout=120,
+                    connect_timeout=60,
+                )
+
+                await increment_music_downloads(chat_id)
+
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=status_msg.message_id,
+                        text="✅ آهنگ با موفقیت ارسال شد!",
+                    )
+                except BadRequest:
+                    pass
+            else:
+                await context.bot.send_message(
+                    chat_id, "❌ دانلود از سرور مبدا شکست خورد یا فایل یافت نشد."
+                )
+
+    except Exception as e:
+        print(f"Download/Upload Error: {e}")
+        await context.bot.send_message(
+            chat_id, "❌ خطایی در فرآیند دانلود یا ارسال رخ داد."
+        )
+
+    finally:
+        # تضمین پاک شدن فایل از روی هارد سرور در هر شرایطی (حتی در صورت کرش یا قطعی اینترنت)
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"Failed to remove file {file_path}: {e}")
+
+
+# ----------------------------------------------------------------
+
+
+def _make_safe_filename(title: str, performer: str) -> str:
+    label = f"{title} - {performer}"
+    return "".join(c for c in label if c.isalnum() or c in " -_").strip() or "track"
+
+
+async def _can_download_music(chat_id: str) -> tuple[bool, int]:
+    user_vip_status = await is_vip(chat_id)
+    limit = 20 if user_vip_status else 6
+    current_downloads = await get_music_downloads(chat_id)
+    return current_downloads < limit, limit
+
+
+async def handle_music_identify_media(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    chat_id = str(update.effective_chat.id)
+    media = get_message_media(update.message)
+    if not media:
+        await update.message.reply_text(
+            "❌ لطفاً ویس، فایل صوتی یا ویدیو (حداکثر ۳ دقیقه) ارسال کنید."
+        )
+        return
+
+    file_obj, filename = media
+    api_duration = get_api_duration_sec(file_obj)
+    if api_duration is not None and api_duration > MAX_DURATION_SEC:
+        await update.message.reply_text(
+            f"❌ حداکثر مدت مجاز ۳ دقیقه است. مدت فایل شما: {format_duration_fa(api_duration)}."
+        )
+        return
+
+    status_msg = await update.message.reply_text("🔎 در حال تشخیص آهنگ...")
+
+    req_id = uuid.uuid4().hex[:8]
+    raw_path = os.path.join(IDENTIFY_DIR, f"{chat_id}_{req_id}_{filename}")
+    audio_path = os.path.join(IDENTIFY_DIR, f"{chat_id}_{req_id}_identify.mp3")
+    paths_to_remove = []
+
+    try:
+        tg_file = await context.bot.get_file(file_obj.file_id)
+        await tg_file.download_to_drive(raw_path)
+        paths_to_remove.append(raw_path)
+
+        real_duration = await asyncio.to_thread(probe_media_duration_sec, raw_path)
+        if real_duration is not None and real_duration > MAX_DURATION_SEC:
+            await status_msg.edit_text(
+                f"❌ حداکثر مدت مجاز ۳ دقیقه است. مدت فایل شما: {format_duration_fa(real_duration)}."
+            )
+            return
+
+        is_video = (
+            update.message.video is not None
+            or update.message.video_note is not None
+            or (
+                update.message.document
+                and (update.message.document.mime_type or "").startswith("video/")
+            )
+        )
+
+        recognize_path = raw_path
+        if is_video or not raw_path.lower().endswith((".mp3", ".ogg", ".m4a", ".wav")):
+            ok = await asyncio.to_thread(
+                extract_audio_to_mp3, raw_path, audio_path, MAX_DURATION_SEC
+            )
+            if not ok:
+                await status_msg.edit_text("❌ استخراج صدا از فایل ناموفق بود.")
+                return
+            recognize_path = audio_path
+            paths_to_remove.append(audio_path)
+
+        identified = await recognize_music_from_file(recognize_path)
+        if not identified:
+            await status_msg.edit_text(
+                "❌ آهنگی شناسایی نشد.\n"
+                "لطفاً بخش واضح‌تری از آهنگ (بدون نویز زیاد) ارسال کنید."
+            )
+            return
+
+        query = f"{identified['title']} {identified['artist']}".strip()
+        results = await asyncio.to_thread(search_track, query, 5)
+
+        try:
+            await status_msg.delete()
+        except BadRequest:
+            pass
+
+        if not results:
+            await update.message.reply_text(
+                format_identified_info_message(identified, pending_download=False)
+                + "\n\n❌ اما نتیجه‌ای برای دانلود در یوتیوب موزیک پیدا نشد."
+            )
+            return
+
+        await update.message.reply_text(format_identified_info_message(identified))
+
+        can_download, limit = await _can_download_music(chat_id)
+        if not can_download:
+            await update.message.reply_text(
+                f"❌ محدودیت دانلود روزانه شما به پایان رسیده است ({limit} آهنگ).\n"
+                "فردا مجدداً تلاش کنید."
+            )
+            return
+
+        best = results[0]
+        track_id = best["id"]
+        dl_title = best["name"]
+        dl_performer = (
+            best["artists"][0]["name"] if best.get("artists") else identified["artist"]
+        )
+        safe_filename = _make_safe_filename(dl_title, dl_performer)
+
+        asyncio.create_task(
+            background_download_task(
+                context,
+                chat_id,
+                track_id,
+                dl_title,
+                dl_performer,
+                safe_filename,
+            )
+        )
+
+    except Exception as e:
+        print(f"Music identify error: {e}")
+        try:
+            await status_msg.edit_text("❌ خطایی در تشخیص آهنگ رخ داد.")
+        except BadRequest:
+            await update.message.reply_text("❌ خطایی در تشخیص آهنگ رخ داد.")
+
+    finally:
+        for path in paths_to_remove:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    print(f"Failed to remove {path}: {e}")
+
+
+async def handle_music_state(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    step: str,
+    text: str,
+    chat_id: str,
+    state_data: dict,
+):
+    if step == "waiting_music_track":
+        results = await asyncio.to_thread(search_track, text)
+        if not results:
+            await update.message.reply_text("❌ نتیجه‌ای یافت نشد.")
+            return
+
+        keyboard = []
+        for item in results:
+            artist_name = (
+                item["artists"][0]["name"] if item.get("artists") else "ناشناس"
+            )
+            btn_text = f"{item['name']} - {artist_name}"
+            keyboard.append(
+                [InlineKeyboardButton(btn_text, callback_data=f"dltrack_{item['id']}")]
+            )
+
+        await update.message.reply_text(
+            "نتایج یافت شده. برای دانلود کلیک کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    elif step == "waiting_music_album":
+        results = await asyncio.to_thread(search_album, text)
+        if not results:
+            await update.message.reply_text("❌ نتیجه‌ای یافت نشد.")
+            return
+
+        keyboard = []
+        for item in results:
+            artist_name = (
+                item["artists"][0]["name"] if item.get("artists") else "ناشناس"
+            )
+            btn_text = f"{item['name']} - {artist_name}"
+            keyboard.append(
+                [InlineKeyboardButton(btn_text, callback_data=f"album_{item['id']}")]
+            )
+
+        await update.message.reply_text(
+            "آلبوم‌های یافت شده:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif step == "waiting_music_artist":
+        results = await asyncio.to_thread(search_artist, text)
+        if not results:
+            await update.message.reply_text("❌ نتیجه‌ای یافت نشد.")
+            return
+
+        keyboard = []
+        for item in results:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        item["name"], callback_data=f"artist_{item['id']}"
+                    )
+                ]
+            )
+
+        await update.message.reply_text(
+            "خواننده‌های یافت شده:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif step == "waiting_music_playlist":
+        results = await asyncio.to_thread(search_playlist, text)
+        if not results:
+            await update.message.reply_text("❌ نتیجه‌ای یافت نشد.")
+            return
+
+        keyboard = []
+        for item in results:
+            btn_text = f"{item['name']} (ایجاد کننده: {item.get('owner', 'ناشناس')})"
+            keyboard.append(
+                [InlineKeyboardButton(btn_text, callback_data=f"playlist_{item['id']}")]
+            )
+
+        await update.message.reply_text(
+            "پلی‌لیست‌های یافت شده:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+
+# هندلر برای دریافت کال‌بک‌های دکمه‌های شیشه‌ای
+async def handle_music_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    # جلوگیری از کرش ربات در صورت قطعی یا کندی سرور بله
+    try:
+        await query.answer()
+    except Exception as e:
+        print(f"Query answer error (Ignored): {e}")
+
+    data = query.data
+    chat_id = str(update.effective_chat.id)
+
+    if data.startswith("album_"):
+        album_id = data.split("_", 1)[1]
+        tracks = await asyncio.to_thread(get_album_tracks, album_id)
+        if not tracks:
+            await query.message.reply_text("❌ آهنگی در این آلبوم یافت نشد.")
+            return
+
+        keyboard = [
+            [InlineKeyboardButton(t["name"], callback_data=f"dltrack_{t['id']}")]
+            for t in tracks
+        ]
+        await query.message.reply_text(
+            "آهنگ‌های این آلبوم:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("playlist_"):
+        playlist_id = data.split("_", 1)[1]
+        tracks = await asyncio.to_thread(get_playlist_tracks, playlist_id)
+        if not tracks:
+            await query.message.reply_text("❌ آهنگی در این پلی‌لیست یافت نشد.")
+            return
+
+        keyboard = [
+            [InlineKeyboardButton(t["name"], callback_data=f"dltrack_{t['id']}")]
+            for t in tracks
+        ]
+        await query.message.reply_text(
+            "آهنگ‌های پلی‌لیست:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("artist_"):
+        artist_id = data.split("_", 1)[1]
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🎧 دریافت آهنگ‌های برتر خواننده",
+                    callback_data=f"toptracks_{artist_id}",
+                )
+            ]
+        ]
+        await query.message.reply_text(
+            "برای دریافت آهنگ‌های برتر کلیک کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    elif data.startswith("toptracks_"):
+        artist_id = data.split("_", 1)[1]
+        tracks = await asyncio.to_thread(get_artist_top_tracks, artist_id)
+        if not tracks:
+            await query.message.reply_text("❌ آهنگی برای این خواننده یافت نشد.")
+            return
+
+        keyboard = [
+            [InlineKeyboardButton(t["name"], callback_data=f"dltrack_{t['id']}")]
+            for t in tracks
+        ]
+        await query.message.reply_text(
+            "آهنگ‌های برتر:", reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data.startswith("dltrack_"):
+        track_id = data.split("_", 1)[1]
+
+        # 1. بررسی محدودیت کاربر (اصلاح شد: اضافه شدن await)
+        user_vip_status = await is_vip(chat_id)
+        limit = 20 if user_vip_status else 6
+        current_downloads = await get_music_downloads(chat_id)
+
+        if current_downloads >= limit:
+            await query.message.reply_text(
+                f"❌ محدودیت دانلود روزانه شما به پایان رسیده است ($ {limit} $ آهنگ).\nفردا مجدداً تلاش کنید."
+            )
+            return
+
+        # پیدا کردن متن دکمه‌ای که کاربر روی آن کلیک کرده برای استخراج نام و خواننده
+        button_text = "Unknown Track"
+        if query.message.reply_markup and query.message.reply_markup.inline_keyboard:
+            for row in query.message.reply_markup.inline_keyboard:
+                for btn in row:
+                    if btn.callback_data == data:
+                        button_text = btn.text
+                        break
+
+        # جدا کردن نام آهنگ و خواننده
+        title = button_text
+        performer = "YouTube Music"
+
+        if " - " in button_text:
+            try:
+                parts = button_text.split(" - ", 1)
+                title = parts[0].strip()
+                performer = parts[1].strip()
+            except ValueError:
+                pass
+
+        # تمیز کردن نام فایل برای جلوگیری از خطای بله
+        safe_filename = "".join(
+            c for c in button_text if c.isalnum() or c in " -_"
+        ).strip()
+
+        context.user_data[f"track_{track_id}"] = {
+            "title": title,
+            "performer": performer,
+            "safe_filename": safe_filename,
+        }
+
+        asyncio.create_task(
+            background_download_task(
+                context,
+                chat_id,
+                track_id,
+                title,
+                performer,
+                safe_filename,
+            )
+        )
