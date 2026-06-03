@@ -18,7 +18,7 @@ async def add_user(user_id, username):
         )
         VALUES (?, ?, 0, ?, 0, ?, 0, ?, 0, ?, 0, 0, 'fa')
         """,
-        (user_id, username, join_date, today, today, today, today),
+        (user_id, username, join_date, today, today, today),
     )
     await conn.execute(
         "UPDATE users SET username = ? WHERE user_id = ?",
