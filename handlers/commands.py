@@ -9,11 +9,47 @@ from dotenv import load_dotenv
 from core.state_manager import clear_state
 from core.keyboards import get_main_menu_keyboard
 from core.messages import msg
+from core.config import is_admin_chat, get_admin_ids
 from core.database import add_user, is_user_banned
 
 load_dotenv()
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 CHANNEL_URL = os.getenv("CHANNEL_URL")
+
+ADMIN_HELP = """
+📖 **راهنمای ادمین**
+
+**دستورات:**
+• `/admin` — باز کردن پنل مدیریت (دکمه‌های اینلاین)
+• `/myid` — نمایش شناسه عددی تلگرام شما (برای قرار دادن در `.env`)
+• `/help` — همین راهنما
+
+**پنل `/admin`:**
+• 👥 **کاربران** — لیست، تغییر موجودی، مسدود/آزاد
+• 💳 **تأیید پرداخت‌ها** — درخواست‌های شارژ کیف پول
+• 🛒 **سفارش‌ها** — خرید پلن در انتظار
+• 📦 **پلن‌ها** — افزودن / حذف پلن
+• 🔗 **کانفیگ‌ها** — ذخیره لیست لینک (اختیاری)
+• 📢 **پیام همگانی** — ارسال به همه کاربران
+• 📊 **آمار**
+
+**شارژ کیف پول (کارت به کارت):**
+۱. کاربر رسید می‌فرستد → شما عکس + دکمه ✅/❌ می‌گیرید
+۲. **تأیید** → موجودی کاربر شارژ می‌شود
+کد یکتا: `PAY-00000001`
+
+**سفارش VPN:**
+۱. کاربر پلن می‌خرد → پیام سفارش با کد `ORD-...`
+۲. **تأیید — ارسال کانفیگ** → در پیام بعدی لینک VPN را بفرستید
+۳. کاربر کانفیگ + اشتراک `SUB-...` می‌گیرد؛ مبلغ از کیف پول کم می‌شود
+۴. **رد** → سفارش لغو (بدون کسر وجه)
+
+**تنظیم `.env`:**
+```
+ADMIN_ID=شناسه_عددی_شما
+```
+چند ادمین: `ADMIN_IDS=111,222`
+"""
 
 
 async def check_membership(bot, user_id):
@@ -58,3 +94,26 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     clear_state(chat_id)
     await send_welcome(update, context)
+
+
+async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_chat.id
+    admins = get_admin_ids()
+    is_adm = str(uid) in admins
+    extra = "\n\n✅ شما در لیست ادمین هستید." if is_adm else (
+        "\n\n⚠️ این شماره را در `.env` به عنوان `ADMIN_ID` قرار دهید."
+    )
+    await update.message.reply_text(
+        f"🆔 شناسه عددی شما:\n`{uid}`{extra}",
+        parse_mode="Markdown",
+    )
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin_chat(update.effective_chat.id):
+        await update.message.reply_text(
+            "برای کاربران: از منوی ربات استفاده کنید.\n"
+            "ادمین: دستور /admin"
+        )
+        return
+    await update.message.reply_text(ADMIN_HELP.strip(), parse_mode="Markdown")

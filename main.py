@@ -4,13 +4,16 @@ import logging
 import os
 
 from dotenv import load_dotenv
+
+# باید قبل از import بقیه ماژول‌ها باشد تا ADMIN_ID از .env خوانده شود
+load_dotenv()
+
 from telegram.ext import ApplicationBuilder
 
 from handlers import register_all_handlers
 from core.database import init_db
 from core.database.connection import close_db
-
-load_dotenv()
+from core.config import get_admin_ids
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_URL") or os.getenv("TELEGRAM_WEBHOOK_URL")
@@ -26,6 +29,14 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(app):
     await init_db()
+    admins = get_admin_ids()
+    if admins:
+        logger.info("Admin IDs loaded: %s", ", ".join(admins))
+    else:
+        logger.warning(
+            "ADMIN_ID is not set — admin will NOT receive orders/payments. "
+            "Use /myid in bot to get your Telegram ID."
+        )
     logger.info("Database initialized")
 
 

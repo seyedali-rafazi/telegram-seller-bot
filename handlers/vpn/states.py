@@ -4,8 +4,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from core.messages import msg
+from core.admin_notify import notify_admins
 from core.state_manager import get_state, set_state, clear_state
-from core.constants import STATE_WALLET_AMOUNT, STATE_WALLET_RECEIPT, ADMIN_ID, BTN_BACK
+from core.constants import STATE_WALLET_AMOUNT, STATE_WALLET_RECEIPT, BTN_BACK
 from core.keyboards import get_main_menu_keyboard
 from core.database import create_payment_request
 from handlers.vpn.user_menu import btn_back
@@ -41,45 +42,47 @@ async def process_wallet_state(update: Update, context: ContextTypes.DEFAULT_TYP
 
         amount = state.get("amount", 0)
         file_id = photo[-1].file_id
-        payment_id = await create_payment_request(uid, amount, file_id)
+        payment = await create_payment_request(uid, amount, file_id)
+        payment_id = payment["id"]
+        payment_code = payment["public_id"]
         clear_state(uid)
 
         await update.message.reply_text(
-            msg("receipt_submitted", amount=amount),
+            msg("receipt_submitted", payment_code=payment_code, amount=amount),
+            parse_mode="HTML",
             reply_markup=get_main_menu_keyboard(),
         )
 
-        if ADMIN_ID:
-            from core.database.users import get_user_info
+        from core.database.users import get_user_info
 
-            info = await get_user_info(uid)
-            uname = info[0] if info else "—"
-            caption = (
-                f"💳 درخواست شارژ #{payment_id}\n"
-                f"کاربر: {uid} (@{uname})\n"
-                f"مبلغ: {amount:,} تومان"
-            )
-            kb = InlineKeyboardMarkup(
+        info = await get_user_info(uid)
+        uname = info[0] if info else "—"
+        caption = (
+            f"💳 درخواست شارژ\n\n"
+            f"کد: {payment_code}\n"
+            f"شناسه دیتابیس: {payment_id}\n\n"
+            f"کاربر: {uid} (@{uname})\n"
+            f"مبلغ: {amount:,} تومان"
+        )
+        kb = InlineKeyboardMarkup(
+            [
                 [
-                    [
-                        InlineKeyboardButton(
-                            "✅ تأیید", callback_data=f"pay_ok_{payment_id}"
-                        ),
-                        InlineKeyboardButton(
-                            "❌ رد", callback_data=f"pay_no_{payment_id}"
-                        ),
-                    ]
+                    InlineKeyboardButton(
+                        "✅ تأیید", callback_data=f"pay_ok_{payment_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "❌ رد", callback_data=f"pay_no_{payment_id}"
+                    ),
                 ]
-            )
-            try:
-                await context.bot.send_photo(
-                    chat_id=ADMIN_ID,
-                    photo=file_id,
-                    caption=caption,
-                    reply_markup=kb,
-                )
-            except Exception:
-                pass
+            ]
+        )
+        await notify_admins(
+            context,
+            text=caption,
+            photo_file_id=file_id,
+            caption=caption,
+            reply_markup=kb,
+        )
         return True
 
     return False

@@ -23,21 +23,22 @@ MESSAGES = {
     ),
     "order_submitted": (
         "✅ سفارش شما ثبت شد.\n\n"
-        "شماره سفارش: #{order_id}\n"
+        "کد سفارش: <code>{order_code}</code>\n"
         "پلن: {name}\n"
         "مبلغ: {price:,} تومان\n\n"
         "پس از بررسی ادمین، لینک VPN برای شما ارسال می‌شود."
     ),
-    "order_pending_line": "⏳ سفارش #{order_id} — {name} ({price:,} تومان)",
+    "order_pending_line": "⏳ {order_code} — {name} ({price:,} تومان)",
     "order_approved_user": (
-        "✅ سفارش #{order_id} تأیید شد.\n\n"
+        "✅ سفارش <code>{order_code}</code> تأیید شد.\n\n"
+        "کد اشتراک: <code>{sub_code}</code>\n"
         "پلن: {name}\n"
         "اعتبار تا: {expires}\n\n"
         "🔗 کانفیگ VPN:\n\n"
         "<code>{config}</code>"
     ),
     "order_rejected_user": (
-        "❌ سفارش #{order_id} رد شد.\n"
+        "❌ سفارش <code>{order_code}</code> رد شد.\n"
         "در صورت نیاز با پشتیبانی تماس بگیرید."
     ),
     "account_title": "👤 <b>حساب کاربری</b>",
@@ -66,6 +67,7 @@ MESSAGES = {
     "upload_receipt": "📸 لطفاً عکس رسید واریز را ارسال کنید:",
     "receipt_submitted": (
         "✅ درخواست شارژ ثبت شد.\n"
+        "کد پرداخت: <code>{payment_code}</code>\n"
         "مبلغ: {amount:,} تومان\n\n"
         "پس از بررسی ادمین، موجودی شما به‌روز می‌شود."
     ),

@@ -3,9 +3,10 @@
 from .connection import get_db
 from .utils import get_tehran_now_full
 from .wallet import adjust_wallet
+from core.ids import payment_public_id
 
 
-async def create_payment_request(user_id: str, amount: int, receipt_file_id: str) -> int:
+async def create_payment_request(user_id: str, amount: int, receipt_file_id: str) -> dict:
     conn = await get_db()
     now = get_tehran_now_full()
     cursor = await conn.execute(
@@ -15,8 +16,14 @@ async def create_payment_request(user_id: str, amount: int, receipt_file_id: str
         """,
         (user_id, amount, receipt_file_id, now),
     )
+    payment_id = cursor.lastrowid
+    pub = payment_public_id(payment_id)
+    await conn.execute(
+        "UPDATE payment_requests SET public_id = ? WHERE id = ?",
+        (pub, payment_id),
+    )
     await conn.commit()
-    return cursor.lastrowid
+    return {"id": payment_id, "public_id": pub}
 
 
 async def get_payment(payment_id: int):
@@ -27,11 +34,19 @@ async def get_payment(payment_id: int):
         return await cursor.fetchone()
 
 
+async def get_payment_by_public_id(public_id: str):
+    conn = await get_db()
+    async with conn.execute(
+        "SELECT * FROM payment_requests WHERE public_id = ?", (public_id,)
+    ) as cursor:
+        return await cursor.fetchone()
+
+
 async def get_pending_payments(limit: int = 20):
     conn = await get_db()
     async with conn.execute(
         """
-        SELECT id, user_id, amount, receipt_file_id, created_at
+        SELECT id, public_id, user_id, amount, receipt_file_id, created_at
         FROM payment_requests WHERE status = 'pending'
         ORDER BY id ASC LIMIT ?
         """,

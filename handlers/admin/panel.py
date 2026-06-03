@@ -6,7 +6,7 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from core.constants import ADMIN_ID
+from core.config import is_admin_chat, get_primary_admin_id
 from core.keyboards import get_admin_menu_keyboard
 from core.state_manager import set_state, clear_state, get_state
 from core.constants import (
@@ -50,8 +50,12 @@ from core.formatting import msg_e
 from core.messages import msg
 
 
+def _admin_key() -> str:
+    return get_primary_admin_id()
+
+
 def is_admin(update: Update) -> bool:
-    return str(update.effective_chat.id) == ADMIN_ID
+    return is_admin_chat(update.effective_chat.id)
 
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -65,7 +69,7 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"پرداخت‌های در انتظار: {pending_pay}\n"
         f"سفارش‌های در انتظار: {pending_ord}\n"
         f"کانفیگ در انبار: {avail}\n\n"
-        "گزینه را انتخاب کنید:",
+        "گزینه را انتخاب کنید.\n\nراهنما: /help",
         parse_mode="Markdown",
         reply_markup=get_admin_menu_keyboard(),
     )
@@ -73,7 +77,7 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if str(query.message.chat_id) != ADMIN_ID:
+    if not is_admin_chat(query.message.chat_id):
         await query.answer()
         return
 
@@ -102,7 +106,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         lines = ["🛒 **سفارش‌های در انتظار:**\n"]
         for r in rows:
-            lines.append(f"#{r[0]} — کاربر {r[1]} — {r[2]:,}ت — {r[4]}")
+            lines.append(f"`{r[1]}` — کاربر `{r[2]}` — {r[3]:,}ت — {r[5]}")
         lines.append("\nروی «تأیید» در پیام سفارش بزنید، سپس لینک VPN را بفرستید.")
         await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
         return
@@ -114,7 +118,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         lines = ["💳 **پرداخت‌های در انتظار:**\n"]
         for r in rows:
-            lines.append(f"#{r[0]} — کاربر {r[1]} — {r[2]:,} تومان")
+            lines.append(f"`{r[1]}` — کاربر `{r[2]}` — {r[3]:,} تومان")
         lines.append("\nاز پیام‌های قبلی با دکمه تأیید/رد اقدام کنید.")
         await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
         return
@@ -149,7 +153,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_addplan":
-        set_state(ADMIN_ID, STATE_ADMIN_PLAN_NAME)
+        set_state(_admin_key(), STATE_ADMIN_PLAN_NAME)
         await query.edit_message_text("نام پلن را ارسال کنید (مثال: یک ماهه ۳۰ گیگ):")
         return
 
@@ -160,7 +164,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_configs":
-        set_state(ADMIN_ID, STATE_ADMIN_CONFIGS)
+        set_state(_admin_key(), STATE_ADMIN_CONFIGS)
         avail = await count_available_configs()
         await query.edit_message_text(
             f"🔗 کانفیگ آزاد: {avail}\n\n"
@@ -170,7 +174,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_broadcast":
-        set_state(ADMIN_ID, STATE_ADMIN_BROADCAST)
+        set_state(_admin_key(), STATE_ADMIN_BROADCAST)
         await query.edit_message_text("📢 متن پیام همگانی را ارسال کنید:")
         return
 
@@ -204,7 +208,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_back":
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         pending_pay = await count_pending_payments()
         pending_ord = await count_pending_orders()
         avail = await count_available_configs()
@@ -220,10 +224,12 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not order or order["status"] != "pending":
             await query.answer("سفارش یافت نشد یا قبلاً بررسی شده", show_alert=True)
             return
-        set_state(ADMIN_ID, STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
-        base = query.message.text or ""
+        set_state(_admin_key(), STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
+        order_code = order["public_id"] or f"ORD-{order_id:08d}"
+        base = query.message.text or query.message.caption or ""
         await query.edit_message_text(
-            base + f"\n\n⏳ لینک VPN سفارش #{order_id} را در **پیام بعدی** ارسال کنید.\n"
+            base
+            + f"\n\n⏳ لینک VPN برای `{order_code}` را در **پیام بعدی** ارسال کنید.\n"
             "(چند خط = چند لینک در یک پیام)",
             parse_mode="Markdown",
             reply_markup=None,
@@ -240,10 +246,12 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 base + "\n\n❌ سفارش رد شد.",
                 reply_markup=None,
             )
+            order_code = order["public_id"] or f"ORD-{order_id:08d}"
             try:
                 await context.bot.send_message(
                     chat_id=order["user_id"],
-                    text=msg("order_rejected_user", order_id=order_id),
+                    text=msg("order_rejected_user", order_code=order_code),
+                    parse_mode="HTML",
                 )
             except Exception:
                 pass
@@ -253,7 +261,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("adm_wallet_"):
         uid = data.replace("adm_wallet_", "")
-        set_state(ADMIN_ID, STATE_ADMIN_USER_BALANCE, target_user=uid)
+        set_state(_admin_key(), STATE_ADMIN_USER_BALANCE, target_user=uid)
         bal = await get_wallet_balance(uid)
         await query.edit_message_text(
             f"کاربر {uid}\nموجودی: {bal:,}\n\n"
@@ -272,16 +280,16 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("pay_ok_"):
         pid = int(data.replace("pay_ok_", ""))
+        payment = await get_payment(pid)
         ok, result = await approve_payment(pid)
-        if ok:
-            await query.edit_message_caption(
-                caption=query.message.caption + "\n\n✅ تأیید شد — کیف پول شارژ شد.",
-                reply_markup=None,
-            )
+        if ok and payment:
+            pay_code = payment["public_id"] or f"PAY-{pid:08d}"
+            cap = (query.message.caption or "") + f"\n\n✅ {pay_code} تأیید شد."
+            await query.edit_message_caption(caption=cap, reply_markup=None)
             try:
                 await context.bot.send_message(
                     chat_id=result,
-                    text=f"✅ پرداخت #{pid} تأیید شد. کیف پول شما شارژ شد.",
+                    text=f"✅ پرداخت {pay_code} تأیید شد. کیف پول شما شارژ شد.",
                 )
             except Exception:
                 pass
@@ -294,14 +302,13 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payment = await get_payment(pid)
         ok = await reject_payment(pid)
         if ok and payment:
-            await query.edit_message_caption(
-                caption=query.message.caption + "\n\n❌ رد شد.",
-                reply_markup=None,
-            )
+            pay_code = payment["public_id"] or f"PAY-{pid:08d}"
+            cap = (query.message.caption or "") + f"\n\n❌ {pay_code} رد شد."
+            await query.edit_message_caption(caption=cap, reply_markup=None)
             try:
                 await context.bot.send_message(
                     chat_id=payment["user_id"],
-                    text=f"❌ پرداخت #{pid} رد شد. با پشتیبانی تماس بگیرید.",
+                    text=f"❌ پرداخت {pay_code} رد شد. با پشتیبانی تماس بگیرید.",
                 )
             except Exception:
                 pass
@@ -311,10 +318,10 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def process_admin_state(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> bool:
-    if str(update.effective_chat.id) != ADMIN_ID:
+    if not is_admin_chat(update.effective_chat.id):
         return False
 
-    state = get_state(ADMIN_ID)
+    state = get_state(_admin_key())
     step = state.get("step")
     if not step:
         return False
@@ -322,7 +329,7 @@ async def process_admin_state(
     text = (update.message.text or "").strip()
 
     if step == STATE_ADMIN_BROADCAST:
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         users = await get_all_users()
         await update.message.reply_text(f"⏳ ارسال به {len(users)} کاربر...")
         ok, fail = 0, 0
@@ -337,7 +344,7 @@ async def process_admin_state(
         return True
 
     if step == STATE_ADMIN_CONFIGS:
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         if update.message.document:
             doc = await update.message.document.get_file()
             content = (await doc.download_as_bytearray()).decode(
@@ -354,7 +361,7 @@ async def process_admin_state(
         return True
 
     if step == STATE_ADMIN_PLAN_NAME:
-        set_state(ADMIN_ID, STATE_ADMIN_PLAN_DAYS, plan_name=text)
+        set_state(_admin_key(), STATE_ADMIN_PLAN_DAYS, plan_name=text)
         await update.message.reply_text("تعداد روز (عدد):")
         return True
 
@@ -362,7 +369,7 @@ async def process_admin_state(
         if not text.isdigit():
             await update.message.reply_text("عدد وارد کنید:")
             return True
-        set_state(ADMIN_ID, STATE_ADMIN_PLAN_GB, plan_name=state["plan_name"], days=int(text))
+        set_state(_admin_key(), STATE_ADMIN_PLAN_GB, plan_name=state["plan_name"], days=int(text))
         await update.message.reply_text("حجم GB (عدد):")
         return True
 
@@ -371,7 +378,7 @@ async def process_admin_state(
             await update.message.reply_text("عدد وارد کنید:")
             return True
         set_state(
-            ADMIN_ID,
+            _admin_key(),
             STATE_ADMIN_PLAN_PRICE,
             plan_name=state["plan_name"],
             days=state["days"],
@@ -384,7 +391,7 @@ async def process_admin_state(
         if not text.isdigit():
             await update.message.reply_text("عدد وارد کنید:")
             return True
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         pid = await create_plan(
             state["plan_name"], state["days"], state["data_gb"], int(text)
         )
@@ -393,7 +400,7 @@ async def process_admin_state(
 
     if step == STATE_ADMIN_ORDER_CONFIG:
         order_id = state.get("order_id")
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         ok, reason, extra = await fulfill_purchase_order(order_id, text)
         if not ok:
             if reason == "insufficient_balance":
@@ -413,7 +420,8 @@ async def process_admin_state(
                 chat_id=user_id,
                 text=msg_e(
                     "order_approved_user",
-                    order_id=order_id,
+                    order_code=extra["order_public_id"],
+                    sub_code=extra["subscription_public_id"],
                     name=extra["name"],
                     expires=extra["expires"],
                     config=extra["config"],
@@ -423,13 +431,15 @@ async def process_admin_state(
         except Exception:
             pass
         await update.message.reply_text(
-            f"✅ سفارش #{order_id} تکمیل شد و کانفیگ برای کاربر {user_id} ارسال شد."
+            f"✅ سفارش {extra['order_public_id']} تکمیل شد.\n"
+            f"اشتراک: {extra['subscription_public_id']}\n"
+            f"کاربر: {user_id}"
         )
         return True
 
     if step == STATE_ADMIN_USER_BALANCE:
         uid = state.get("target_user")
-        clear_state(ADMIN_ID)
+        clear_state(_admin_key())
         if text.startswith("+") or text.startswith("-"):
             delta = int(text)
             new_bal = await adjust_wallet(uid, delta)

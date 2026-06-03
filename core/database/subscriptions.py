@@ -24,7 +24,7 @@ async def get_user_pending_orders(user_id: str):
     conn = await get_db()
     async with conn.execute(
         """
-        SELECT o.id, p.name, o.amount, o.created_at
+        SELECT o.public_id, p.name, o.amount, o.created_at
         FROM purchase_orders o
         JOIN vpn_plans p ON p.id = o.plan_id
         WHERE o.user_id = ? AND o.status = 'pending'

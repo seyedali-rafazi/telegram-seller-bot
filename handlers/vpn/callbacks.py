@@ -3,8 +3,8 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from core.constants import ADMIN_ID
 from core.messages import msg
+from core.admin_notify import notify_admins
 from core.keyboards import get_main_menu_keyboard, get_confirm_purchase_keyboard
 from core.database import (
     is_user_banned,
@@ -36,13 +36,15 @@ async def plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
-async def _notify_admin_new_order(context, order_id, uid, name, price, duration_days, data_gb):
-    if not ADMIN_ID:
-        return
+async def _notify_admin_new_order(
+    context, order_id, order_code, uid, name, price, duration_days, data_gb
+):
     info = await get_user_info(uid)
     uname = info[0] if info else "—"
     text = (
-        f"🛒 سفارش جدید #{order_id}\n\n"
+        f"🛒 سفارش جدید\n\n"
+        f"کد: {order_code}\n"
+        f"شناسه دیتابیس: {order_id}\n\n"
         f"👤 کاربر: {uid} (@{uname})\n"
         f"📦 پلن: {name}\n"
         f"⏱ {duration_days} روز | 📊 {data_gb} گیگ\n"
@@ -59,14 +61,7 @@ async def _notify_admin_new_order(context, order_id, uid, name, price, duration_
             [InlineKeyboardButton("❌ رد سفارش", callback_data=f"order_no_{order_id}")],
         ]
     )
-    try:
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=text,
-            reply_markup=kb,
-        )
-    except Exception:
-        pass
+    await notify_admins(context, text, reply_markup=kb)
 
 
 async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -101,13 +96,15 @@ async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text(msg("no_plans"))
         return
 
+    order_code = extra["public_id"]
     await query.edit_message_text(
         msg(
             "order_submitted",
-            order_id=extra["order_id"],
+            order_code=order_code,
             name=extra["name"],
             price=extra["price"],
-        )
+        ),
+        parse_mode="HTML",
     )
     await context.bot.send_message(
         chat_id=uid,
@@ -117,6 +114,7 @@ async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await _notify_admin_new_order(
         context,
         extra["order_id"],
+        order_code,
         uid,
         extra["name"],
         extra["price"],

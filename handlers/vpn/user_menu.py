@@ -73,7 +73,7 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if pending:
         pending_lines = [
-            msg_e("order_pending_line", order_id=p[0], name=p[1], price=p[2])
+            msg_e("order_pending_line", order_code=p[0], name=p[1], price=p[2])
             for p in pending
         ]
         pending_orders = "\n".join(pending_lines)

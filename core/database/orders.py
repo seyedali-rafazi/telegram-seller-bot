@@ -6,6 +6,7 @@ from .connection import get_db
 from .utils import get_tehran_now_full
 from .plans import get_plan
 from .wallet import get_wallet_balance, deduct_wallet
+from core.ids import order_public_id, subscription_public_id
 
 
 async def create_purchase_order(
@@ -29,11 +30,17 @@ async def create_purchase_order(
         """,
         (user_id, plan_id, price, now),
     )
-    await conn.commit()
     order_id = cursor.lastrowid
+    pub = order_public_id(order_id)
+    await conn.execute(
+        "UPDATE purchase_orders SET public_id = ? WHERE id = ?",
+        (pub, order_id),
+    )
+    await conn.commit()
 
     return True, "pending", {
         "order_id": order_id,
+        "public_id": pub,
         "name": name,
         "price": price,
         "duration_days": duration_days,
@@ -53,7 +60,7 @@ async def get_pending_orders(limit: int = 20):
     conn = await get_db()
     async with conn.execute(
         """
-        SELECT o.id, o.user_id, o.amount, o.created_at, p.name
+        SELECT o.id, o.public_id, o.user_id, o.amount, o.created_at, p.name
         FROM purchase_orders o
         JOIN vpn_plans p ON p.id = o.plan_id
         WHERE o.status = 'pending'
@@ -109,6 +116,7 @@ async def fulfill_purchase_order(
 
     user_id = order["user_id"]
     _, name, duration_days, _, price, _ = plan
+    order_code = order["public_id"] or order_public_id(order_id)
 
     if not await deduct_wallet(user_id, price):
         return False, "insufficient_balance", {"user_id": user_id, "price": price}
@@ -129,6 +137,11 @@ async def fulfill_purchase_order(
         (user_id, order["plan_id"], config_text, started_at, expires_at),
     )
     sub_id = sub_cursor.lastrowid
+    sub_pub = subscription_public_id(sub_id)
+    await conn.execute(
+        "UPDATE user_subscriptions SET public_id = ? WHERE id = ?",
+        (sub_pub, sub_id),
+    )
     await conn.execute(
         """
         UPDATE purchase_orders
@@ -145,4 +158,6 @@ async def fulfill_purchase_order(
         "config": config_text,
         "expires": expires_at[:10],
         "subscription_id": sub_id,
+        "subscription_public_id": sub_pub,
+        "order_public_id": order_code,
     }

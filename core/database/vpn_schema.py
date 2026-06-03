@@ -129,4 +129,29 @@ async def init_vpn_tables():
     await conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES ('card_holder', '')"
     )
+
+    from core.ids import payment_public_id, order_public_id, subscription_public_id
+
+    async def _add_public_id(table: str, maker):
+        async with conn.execute(f"PRAGMA table_info({table})") as cursor:
+            cols = [c[1] for c in await cursor.fetchall()]
+        if "public_id" not in cols:
+            await conn.execute(f"ALTER TABLE {table} ADD COLUMN public_id TEXT")
+        async with conn.execute(
+            f"SELECT id FROM {table} WHERE public_id IS NULL OR public_id = ''"
+        ) as cursor:
+            for (row_id,) in await cursor.fetchall():
+                await conn.execute(
+                    f"UPDATE {table} SET public_id = ? WHERE id = ?",
+                    (maker(row_id), row_id),
+                )
+        await conn.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_public_id "
+            f"ON {table}(public_id)"
+        )
+
+    await _add_public_id("payment_requests", payment_public_id)
+    await _add_public_id("purchase_orders", order_public_id)
+    await _add_public_id("user_subscriptions", subscription_public_id)
+
     await conn.commit()
