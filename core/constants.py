@@ -10,6 +10,7 @@ CARD_HOLDER = os.getenv("CARD_HOLDER", "VPN Bot")
 # دکمه‌های منو (فارسی)
 BTN_BUY = "🛒 خرید پلن"
 BTN_ACCOUNT = "👤 حساب من"
+BTN_MY_ORDERS = "📋 سفارش‌ها و کانفیگ"
 BTN_WALLET = "💳 شارژ کیف پول"
 BTN_SUPPORT = "📖 راهنما و پشتیبانی"
 BTN_BACK = "🔙 بازگشت"

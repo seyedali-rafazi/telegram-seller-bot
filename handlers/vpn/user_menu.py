@@ -8,6 +8,7 @@ from core.formatting import msg_e, h
 from core.constants import (
     BTN_BUY,
     BTN_ACCOUNT,
+    BTN_MY_ORDERS,
     BTN_WALLET,
     BTN_SUPPORT,
     BTN_BACK,
@@ -141,6 +142,10 @@ async def route_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await btn_buy_plan(update, context)
     elif text == BTN_ACCOUNT:
         await btn_account(update, context)
+    elif text == BTN_MY_ORDERS:
+        from .user_orders_ui import btn_orders_hub
+
+        await btn_orders_hub(update, context)
     elif text == BTN_WALLET:
         await btn_wallet(update, context)
     elif text == BTN_SUPPORT:

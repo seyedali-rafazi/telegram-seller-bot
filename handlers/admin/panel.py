@@ -81,6 +81,11 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         return
 
+    from .user_panel import admin_user_panel_callback
+
+    if await admin_user_panel_callback(update, context):
+        return
+
     await query.answer()
     data = query.data
 
@@ -190,8 +195,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb.append(
                 [
                     InlineKeyboardButton(
-                        f"💰 {r[0][-6:]}",
-                        callback_data=f"adm_wallet_{r[0]}",
+                        f"👤 {r[0][-6:]}",
+                        callback_data=f"adm_uhome_{r[0]}",
                     ),
                     InlineKeyboardButton(
                         "🚫" if not r[3] else "✅",

@@ -6,14 +6,23 @@ from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
-from core.constants import BTN_BUY, BTN_ACCOUNT, BTN_WALLET, BTN_SUPPORT, BTN_BACK, SUPPORT_URL
+from core.constants import (
+    BTN_BUY,
+    BTN_ACCOUNT,
+    BTN_MY_ORDERS,
+    BTN_WALLET,
+    BTN_SUPPORT,
+    BTN_BACK,
+    SUPPORT_URL,
+)
 from core.messages import msg
 
 
 def get_main_menu_keyboard():
     keyboard = [
         [KeyboardButton(BTN_BUY), KeyboardButton(BTN_ACCOUNT)],
-        [KeyboardButton(BTN_WALLET), KeyboardButton(BTN_SUPPORT)],
+        [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_WALLET)],
+        [KeyboardButton(BTN_SUPPORT)],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 

@@ -33,6 +33,13 @@ from .payments import (
 )
 from .configs import add_configs_bulk, count_available_configs, count_total_configs
 from .subscriptions import get_active_subscriptions, get_user_pending_orders
+from .user_orders import (
+    get_user_pending_orders_detailed,
+    get_user_orders_history,
+    count_user_orders_by_status,
+    get_user_subscriptions_all,
+    get_subscription_by_id,
+)
 from .orders import (
     create_purchase_order,
     get_order,
