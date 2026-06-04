@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 
 from core.config import is_admin_chat, get_primary_admin_id
 from core.state_manager import set_state
-from core.constants import STATE_ADMIN_ORDER_CONFIG, STATE_ADMIN_USER_BALANCE
+from core.constants import STATE_ADMIN_ORDER_CONFIG
 from core.database import get_wallet_balance, get_order
 from core.database.users import get_user_info, is_user_banned
 from core.database.user_orders import (
@@ -15,6 +15,8 @@ from core.database.user_orders import (
     get_user_subscriptions_all,
 )
 from core.formatting import h
+
+PARSE = "HTML"
 
 
 def _admin_key() -> str:
@@ -31,9 +33,10 @@ STATUS_FA = {
 async def build_user_summary_text(user_id: str) -> str:
     info = await get_user_info(user_id)
     if not info:
-        return f"❌ کاربر `{user_id}` در دیتابیس یافت نشد."
+        return f"❌ کاربر <code>{h(user_id)}</code> در دیتابیس یافت نشد."
 
     username, _, join_date, _ = info
+    uname = f"@{username}" if username else "—"
     balance = await get_wallet_balance(user_id)
     banned = await is_user_banned(user_id)
     counts = await count_user_orders_by_status(user_id)
@@ -41,17 +44,17 @@ async def build_user_summary_text(user_id: str) -> str:
     live_subs = sum(1 for s in subs if s[6] == 1)
 
     return (
-        f"👤 **پروفایل کاربر**\n\n"
-        f"🆔 شناسه: `{user_id}`\n"
-        f"👤 یوزرنیم: @{username or '—'}\n"
-        f"💰 موجودی: **{balance:,}** تومان\n"
-        f"📅 عضویت: {join_date or '—'}\n"
+        f"👤 <b>پروفایل کاربر</b>\n\n"
+        f"🆔 شناسه: <code>{h(user_id)}</code>\n"
+        f"👤 یوزرنیم: {h(uname)}\n"
+        f"💰 موجودی: <b>{balance:,}</b> تومان\n"
+        f"📅 عضویت: {h(join_date or '—')}\n"
         f"🚫 مسدود: {'بله' if banned else 'خیر'}\n\n"
         f"📦 سفارش‌ها:\n"
-        f"  ⏳ در انتظار کانفیگ: **{counts['pending']}**\n"
-        f"  ✅ انجام‌شده: **{counts['approved']}**\n"
-        f"  ❌ رد شده: **{counts['rejected']}**\n\n"
-        f"🔗 اشتراک فعال: **{live_subs}**"
+        f"  ⏳ در انتظار کانفیگ: <b>{counts['pending']}</b>\n"
+        f"  ✅ انجام‌شده: <b>{counts['approved']}</b>\n"
+        f"  ❌ رد شده: <b>{counts['rejected']}</b>\n\n"
+        f"🔗 اشتراک فعال: <b>{live_subs}</b>"
     )
 
 
@@ -91,19 +94,39 @@ def user_panel_keyboard(user_id: str, counts: dict) -> InlineKeyboardMarkup:
     )
 
 
+def pending_orders_list_keyboard(rows, back_callback: str = "adm_back") -> InlineKeyboardMarkup:
+    """rows: id, public_id, user_id, amount, created_at, plan_name"""
+    kb = []
+    for r in rows:
+        oid, code, uid, amount, _, pname = r[0], r[1], r[2], r[3], r[4], r[5]
+        label = f"📤 {code}"[:60]
+        kb.append(
+            [
+                InlineKeyboardButton(label, callback_data=f"adm_fulfill_{oid}"),
+                InlineKeyboardButton("❌", callback_data=f"order_no_{oid}"),
+            ]
+        )
+        kb.append(
+            [
+                InlineKeyboardButton(
+                    f"👤 {uid[-8:]} — {pname[:20]}",
+                    callback_data=f"adm_uhome_{uid}",
+                )
+            ]
+        )
+    kb.append([InlineKeyboardButton("🔙 پنل ادمین", callback_data=back_callback)])
+    return InlineKeyboardMarkup(kb)
+
+
 async def send_user_panel(update: Update, user_id: str, *, edit_message=None):
     counts = await count_user_orders_by_status(user_id)
     text = await build_user_summary_text(user_id)
     kb = user_panel_keyboard(user_id, counts)
 
     if edit_message:
-        await edit_message.edit_message_text(
-            text, parse_mode="Markdown", reply_markup=kb
-        )
+        await edit_message.edit_message_text(text, parse_mode=PARSE, reply_markup=kb)
     else:
-        await update.message.reply_text(
-            text, parse_mode="Markdown", reply_markup=kb
-        )
+        await update.message.reply_text(text, parse_mode=PARSE, reply_markup=kb)
 
 
 async def cmd_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,9 +134,9 @@ async def cmd_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if not context.args:
         await update.message.reply_text(
-            "❌ فرمت:\n`/user 123456789`\n\n"
+            "❌ فرمت:\n<code>/user 123456789</code>\n\n"
             "شناسه عددی کاربر را از پیام یا پروفایل کپی کنید.",
-            parse_mode="Markdown",
+            parse_mode=PARSE,
         )
         return
     user_id = context.args[0].strip()
@@ -159,22 +182,23 @@ async def admin_user_panel_callback(
             return True
         kb = []
         for r in rows:
-            oid, code, pname, amount, _ = r[0], r[1], r[2], r[3], r[4]
+            oid, code, pname = r[0], r[1], r[2]
             kb.append(
                 [
                     InlineKeyboardButton(
-                        f"📤 {code} — {pname}",
+                        f"📤 {code} — {pname[:25]}",
                         callback_data=f"adm_fulfill_{oid}",
-                    )
+                    ),
+                    InlineKeyboardButton("❌", callback_data=f"order_no_{oid}"),
                 ]
             )
         kb.append(
             [InlineKeyboardButton("🔙 بازگشت", callback_data=f"adm_uhome_{user_id}")]
         )
         await query.edit_message_text(
-            f"⏳ **سفارش‌های در انتظار** — کاربر `{user_id}`\n\n"
-            "روی سفارش بزنید، سپس در پیام بعدی لینک VPN را ارسال کنید:",
-            parse_mode="Markdown",
+            f"⏳ <b>سفارش‌های در انتظار</b> — <code>{h(user_id)}</code>\n\n"
+            "روی 📤 بزنید → پیام بعدی لینک VPN را بفرستید:",
+            parse_mode=PARSE,
             reply_markup=InlineKeyboardMarkup(kb),
         )
         return True
@@ -191,12 +215,10 @@ async def admin_user_panel_callback(
             )
             return True
         kb = []
-        lines = [f"✅ **سفارش‌های موفق** — `{user_id}`\n"]
+        lines = [f"✅ <b>سفارش‌های موفق</b> — <code>{h(user_id)}</code>\n"]
         for r in rows[:15]:
-            oid, code, _, pname, amount, created, _, reviewed = (
-                r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
-            )
-            lines.append(f"• `{code}` — {pname} — {amount:,}ت")
+            oid, code, pname, amount = r[0], r[1], r[3], r[4]
+            lines.append(f"• <code>{h(code)}</code> — {h(pname)} — {amount:,}ت")
             kb.append(
                 [
                     InlineKeyboardButton(
@@ -210,7 +232,7 @@ async def admin_user_panel_callback(
         )
         await query.edit_message_text(
             "\n".join(lines),
-            parse_mode="Markdown",
+            parse_mode=PARSE,
             reply_markup=InlineKeyboardMarkup(kb),
         )
         return True
@@ -222,17 +244,24 @@ async def admin_user_panel_callback(
             await query.edit_message_text(
                 "❌ سفارش رد شده‌ای نیست.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 بازگشت", callback_data=f"adm_uhome_{user_id}")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 بازگشت", callback_data=f"adm_uhome_{user_id}"
+                            )
+                        ]
+                    ]
                 ),
             )
             return True
-        lines = [f"❌ **رد شده** — `{user_id}`\n"]
+        lines = [f"❌ <b>رد شده</b> — <code>{h(user_id)}</code>\n"]
         for r in rows:
-            lines.append(f"• `{r[1]}` — {r[3]} — {r[4]:,}ت — {r[5][:10]}")
-        lines.append("\n🔙 برای بازگشت دکمه زیر را بزنید.")
+            lines.append(
+                f"• <code>{h(r[1])}</code> — {h(r[3])} — {r[4]:,}ت — {r[5][:10]}"
+            )
         await query.edit_message_text(
             "\n".join(lines),
-            parse_mode="Markdown",
+            parse_mode=PARSE,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 بازگشت", callback_data=f"adm_uhome_{user_id}")]]
             ),
@@ -248,12 +277,12 @@ async def admin_user_panel_callback(
         set_state(_admin_key(), STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
         code = order["public_id"]
         await query.edit_message_text(
-            f"📤 **ارسال کانفیگ**\n\n"
-            f"کد: `{code}`\n"
-            f"کاربر: `{order['user_id']}`\n"
+            f"📤 <b>ارسال کانفیگ</b>\n\n"
+            f"کد: <code>{h(code)}</code>\n"
+            f"کاربر: <code>{h(order['user_id'])}</code>\n"
             f"مبلغ: {order['amount']:,} تومان\n\n"
-            f"⏳ **لینک VPN را در پیام بعدی بفرستید.**",
-            parse_mode="Markdown",
+            f"⏳ <b>لینک VPN را در پیام بعدی بفرستید.</b>",
+            parse_mode=PARSE,
             reply_markup=None,
         )
         return True
@@ -275,19 +304,19 @@ async def admin_user_panel_callback(
             cfg = cfg[:3500] + "…"
         uid = order["user_id"]
         text = (
-            f"📋 **جزئیات سفارش**\n\n"
-            f"کد: `{code}`\n"
+            f"📋 <b>جزئیات سفارش</b>\n\n"
+            f"کد: <code>{h(code)}</code>\n"
             f"وضعیت: {st}\n"
-            f"کاربر: `{uid}`\n"
-            f"پلن: {pname}\n"
+            f"کاربر: <code>{h(uid)}</code>\n"
+            f"پلن: {h(pname)}\n"
             f"مبلغ: {order['amount']:,} تومان\n"
-            f"تاریخ: {order['created_at'][:16]}\n\n"
-            f"🔗 **کانفیگ ارسال‌شده:**\n\n"
+            f"تاریخ: {h(order['created_at'][:16])}\n\n"
+            f"🔗 <b>کانفیگ ارسال‌شده:</b>\n\n"
             f"<code>{h(cfg)}</code>"
         )
         await query.edit_message_text(
             text,
-            parse_mode="HTML",
+            parse_mode=PARSE,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 پروفایل کاربر", callback_data=f"adm_uhome_{uid}")]]
             ),

@@ -105,15 +105,31 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_orders":
+        from .user_panel import pending_orders_list_keyboard
+        from core.formatting import h
+
         rows = await get_pending_orders(15)
         if not rows:
-            await query.edit_message_text("✅ سفارش معلقی نیست.")
+            await query.edit_message_text(
+                "✅ سفارش معلقی نیست.",
+                reply_markup=get_admin_menu_keyboard(),
+            )
             return
-        lines = ["🛒 **سفارش‌های در انتظار:**\n"]
+        lines = [
+            "🛒 <b>سفارش‌های در انتظار</b>\n\n"
+            "📤 = ارسال کانفیگ (پیام بعدی لینک VPN)\n"
+            "❌ = رد سفارش | 👤 = پروفایل کاربر\n"
+        ]
         for r in rows:
-            lines.append(f"`{r[1]}` — کاربر `{r[2]}` — {r[3]:,}ت — {r[5]}")
-        lines.append("\nروی «تأیید» در پیام سفارش بزنید، سپس لینک VPN را بفرستید.")
-        await query.edit_message_text("\n".join(lines), parse_mode="Markdown")
+            lines.append(
+                f"\n<code>{h(r[1])}</code>\n"
+                f"کاربر <code>{h(r[2])}</code> — {r[3]:,}ت — {h(r[5])}"
+            )
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            reply_markup=pending_orders_list_keyboard(rows, back_callback="adm_back"),
+        )
         return
 
     if data == "adm_payments":
@@ -232,11 +248,12 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_state(_admin_key(), STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
         order_code = order["public_id"] or f"ORD-{order_id:08d}"
         base = query.message.text or query.message.caption or ""
+        from core.formatting import h
+
         await query.edit_message_text(
-            base
-            + f"\n\n⏳ لینک VPN برای `{order_code}` را در **پیام بعدی** ارسال کنید.\n"
-            "(چند خط = چند لینک در یک پیام)",
-            parse_mode="Markdown",
+            (query.message.text or query.message.caption or "")
+            + f"\n\n⏳ لینک VPN برای <code>{h(order_code)}</code> را در <b>پیام بعدی</b> ارسال کنید.",
+            parse_mode="HTML",
             reply_markup=None,
         )
         return
