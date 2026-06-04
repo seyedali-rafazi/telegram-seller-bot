@@ -45,6 +45,7 @@ from .orders import (
     get_order,
     get_pending_orders,
     count_pending_orders,
+    count_user_pending_orders,
     reject_purchase_order,
     fulfill_purchase_order,
 )

@@ -272,7 +272,11 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     chat_id=order["user_id"],
-                    text=msg("order_rejected_user", order_code=order_code),
+                    text=msg(
+                        "order_rejected_user",
+                        order_code=order_code,
+                        refund=int(order["amount"]),
+                    ),
                     parse_mode="HTML",
                 )
             except Exception:
@@ -425,12 +429,7 @@ async def process_admin_state(
         clear_state(_admin_key())
         ok, reason, extra = await fulfill_purchase_order(order_id, text)
         if not ok:
-            if reason == "insufficient_balance":
-                await update.message.reply_text(
-                    f"❌ موجودی کاربر {extra['user_id']} کافی نیست "
-                    f"({extra['price']:,} تومان). کیف پول را بررسی کنید."
-                )
-            elif reason == "invalid_config":
+            if reason == "invalid_config":
                 await update.message.reply_text("❌ لینک کانفیگ خیلی کوتاه است.")
             else:
                 await update.message.reply_text(f"❌ خطا: {reason}")

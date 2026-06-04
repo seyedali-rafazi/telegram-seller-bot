@@ -92,6 +92,10 @@ async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                     balance=extra["balance"] if extra else balance,
                 )
             )
+        elif reason == "too_many_pending":
+            await query.edit_message_text(
+                msg("too_many_pending", count=extra.get("count", 5))
+            )
         else:
             await query.edit_message_text(msg("no_plans"))
         return
@@ -103,6 +107,7 @@ async def buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             order_code=order_code,
             name=extra["name"],
             price=extra["price"],
+            new_balance=extra["new_balance"],
         ),
         parse_mode="HTML",
     )

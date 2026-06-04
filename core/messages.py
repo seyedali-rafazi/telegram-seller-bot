@@ -25,8 +25,13 @@ MESSAGES = {
         "✅ سفارش شما ثبت شد.\n\n"
         "کد سفارش: <code>{order_code}</code>\n"
         "پلن: {name}\n"
-        "مبلغ: {price:,} تومان\n\n"
+        "مبلغ: {price:,} تومان (از کیف پول کسر شد)\n"
+        "موجودی باقی‌مانده: <b>{new_balance:,}</b> تومان\n\n"
         "پس از بررسی ادمین، لینک VPN برای شما ارسال می‌شود."
+    ),
+    "too_many_pending": (
+        "❌ شما {count} سفارش در انتظار دارید.\n"
+        "لطفاً تا بررسی سفارش‌های قبلی صبر کنید."
     ),
     "order_pending_line": "⏳ {order_code} — {name} ({price:,} تومان)",
     "order_approved_user": (
@@ -39,6 +44,7 @@ MESSAGES = {
     ),
     "order_rejected_user": (
         "❌ سفارش <code>{order_code}</code> رد شد.\n"
+        "مبلغ {refund:,} تومان به کیف پول شما برگشت.\n"
         "در صورت نیاز با پشتیبانی تماس بگیرید."
     ),
     "account_title": "👤 <b>حساب کاربری</b>",
