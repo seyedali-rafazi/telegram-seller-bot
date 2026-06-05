@@ -83,3 +83,39 @@ async def count_total_test_configs() -> int:
     conn = await get_db()
     async with conn.execute("SELECT COUNT(*) FROM test_config_pool") as cursor:
         return (await cursor.fetchone())[0]
+
+
+async def list_test_config_pool(limit: int = 25):
+    conn = await get_db()
+    async with conn.execute(
+        """
+        SELECT id, sub_url, is_assigned, assigned_to, created_at
+        FROM test_config_pool
+        ORDER BY id DESC LIMIT ?
+        """,
+        (limit,),
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def delete_test_pool_item(pool_id: int) -> tuple[bool, str]:
+    conn = await get_db()
+    async with conn.execute(
+        """
+        SELECT id, is_assigned, assigned_to
+        FROM test_config_pool WHERE id = ?
+        """,
+        (pool_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if not row:
+        return False, "not_found"
+
+    if row["is_assigned"] and row["assigned_to"]:
+        await conn.execute(
+            "DELETE FROM test_configs WHERE user_id = ?",
+            (row["assigned_to"],),
+        )
+    await conn.execute("DELETE FROM test_config_pool WHERE id = ?", (pool_id,))
+    await conn.commit()
+    return True, "ok"

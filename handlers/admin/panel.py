@@ -41,6 +41,8 @@ from core.database import (
     add_test_configs_bulk,
     count_available_test_configs,
     count_total_test_configs,
+    list_test_config_pool,
+    delete_test_pool_item,
     get_bale_request,
     fulfill_bale_request,
     count_pending_bale_requests,
@@ -116,6 +118,53 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "گزینه را انتخاب کنید.\n\nراهنما: /help",
         parse_mode="Markdown",
         reply_markup=get_admin_menu_keyboard(),
+    )
+
+
+async def _show_test_pool_list(query) -> None:
+    rows = await list_test_config_pool(25)
+    avail = await count_available_test_configs()
+    total = await count_total_test_configs()
+    kb = []
+    lines = [
+        f"🧪 **مدیریت ساب تست**",
+        f"آزاد: **{avail}** / کل: **{total}**",
+        "",
+        "روی 🗑 بزنید تا حذف شود.",
+        "اگر به کاربری داده شده باشد، دسترسی تست او هم پاک می‌شود.",
+        "",
+    ]
+    if not rows:
+        lines.append("لیست خالی است.")
+    else:
+        for r in rows:
+            pid, url, is_assigned, assigned_to, created = (
+                r[0],
+                r[1],
+                r[2],
+                r[3],
+                r[4],
+            )
+            preview = url if len(url) <= 48 else url[:45] + "…"
+            if is_assigned and assigned_to:
+                status = f"👤 `{assigned_to}`"
+            else:
+                status = "✅ آزاد"
+            date = (created or "")[:10] or "—"
+            lines.append(f"**#{pid}** — {status} — {date}\n`{preview}`")
+            kb.append(
+                [
+                    InlineKeyboardButton(
+                        f"🗑 حذف #{pid}",
+                        callback_data=f"adm_test_del_{pid}",
+                    )
+                ]
+            )
+    kb.append([InlineKeyboardButton("🔙 ساب تست", callback_data="adm_test_configs")])
+    await query.edit_message_text(
+        "\n".join(lines),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb),
     )
 
 
@@ -352,18 +401,56 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "adm_test_configs":
+        avail = await count_available_test_configs()
+        total = await count_total_test_configs()
+        await query.edit_message_text(
+            f"🧪 **ساب تست**\n\n"
+            f"آزاد: **{avail}** / کل: **{total}**",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("➕ افزودن", callback_data="adm_test_add")],
+                    [
+                        InlineKeyboardButton(
+                            "📋 مشاهده و حذف", callback_data="adm_test_list"
+                        )
+                    ],
+                    [InlineKeyboardButton("🔙 پنل", callback_data="adm_back")],
+                ]
+            ),
+        )
+        return
+
+    if data == "adm_test_add":
         set_state(_admin_key(), STATE_ADMIN_TEST_CONFIGS)
         avail = await count_available_test_configs()
         total = await count_total_test_configs()
         await query.edit_message_text(
-            f"🧪 **کانفیگ تست**\n\n"
+            f"🧪 **افزودن ساب تست**\n\n"
             f"آزاد: **{avail}** / کل: **{total}**\n\n"
             "هر خط یک لینک اشتراک تست (sub URL):\n"
             "مثال:\n"
             "`https://panel.example.com/sub/abc123`\n\n"
             "متن یا فایل `.txt` بفرستید.",
             parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 ساب تست", callback_data="adm_test_configs")]]
+            ),
         )
+        return
+
+    if data == "adm_test_list":
+        await _show_test_pool_list(query)
+        return
+
+    if data.startswith("adm_test_del_"):
+        pool_id = int(data.replace("adm_test_del_", ""))
+        ok, reason = await delete_test_pool_item(pool_id)
+        if not ok:
+            await query.answer("یافت نشد", show_alert=True)
+            return
+        await query.answer("✅ حذف شد")
+        await _show_test_pool_list(query)
         return
 
     if data == "adm_broadcast":
@@ -573,7 +660,8 @@ async def process_admin_state(
         total = await count_total_test_configs()
         await update.message.reply_text(
             f"✅ {added} کانفیگ تست اضافه شد.\n"
-            f"آزاد: {avail} / کل: {total}"
+            f"آزاد: {avail} / کل: {total}\n\n"
+            f"برای حذف: /admin → 🧪 ساب تست → 📋 مشاهده و حذف"
         )
         return True
 

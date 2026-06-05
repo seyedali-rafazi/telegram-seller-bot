@@ -52,6 +52,8 @@ from .test_configs import (
     add_test_configs_bulk,
     count_available_test_configs,
     count_total_test_configs,
+    list_test_config_pool,
+    delete_test_pool_item,
 )
 from .subscriptions import get_active_subscriptions, get_user_pending_orders
 from .user_orders import (
