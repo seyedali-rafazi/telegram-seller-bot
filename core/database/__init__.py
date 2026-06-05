@@ -39,6 +39,7 @@ from .bale_requests import (
     count_pending_bale_requests,
     get_pending_bale_requests,
     get_user_pending_bale_request,
+    get_user_latest_approved_bale,
     get_approved_history_by_bale_id,
     get_approved_history_by_user_id,
     has_prior_bale_approval,

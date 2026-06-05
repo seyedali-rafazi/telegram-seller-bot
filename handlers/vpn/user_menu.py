@@ -16,8 +16,6 @@ from core.constants import (
     BTN_BACK,
     STATE_WALLET_AMOUNT,
     STATE_BALE_ID,
-    CARD_NUMBER,
-    CARD_HOLDER,
 )
 from core.keyboards import (
     get_main_menu_keyboard,
@@ -33,10 +31,10 @@ from core.database import (
     get_user_info,
     get_active_subscriptions,
     get_user_pending_orders,
-    get_setting,
     get_user_test_config,
     assign_test_config_to_user,
     get_user_pending_bale_request,
+    get_user_latest_approved_bale,
 )
 
 
@@ -110,15 +108,10 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def btn_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _guard_banned(update):
         return
-    card = CARD_NUMBER or await get_setting("card_number", "")
-    card_name = CARD_HOLDER or await get_setting("card_holder", "VPN")
-    if not card:
-        await update.message.reply_text(msg("card_not_set"))
-        return
 
     set_state(str(update.effective_chat.id), STATE_WALLET_AMOUNT)
     await update.message.reply_text(
-        msg_e("wallet_intro", card=card, card_name=card_name),
+        msg("wallet_intro"),
         parse_mode="HTML",
         reply_markup=get_back_keyboard(),
     )
@@ -142,6 +135,19 @@ async def btn_bale_subscription(update: Update, context: ContextTypes.DEFAULT_TY
     if pending:
         await update.message.reply_text(
             msg("bale_sub_pending_wait"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+    approved = await get_user_latest_approved_bale(uid)
+    if approved:
+        _, _, bale_id, sub_url, _ = approved
+        await update.message.reply_text(
+            msg(
+                "bale_sub_active",
+                bale_id=bale_id,
+                sub_body=format_sub_delivery(sub_url),
+            ),
+            parse_mode="HTML",
             reply_markup=get_main_menu_keyboard(),
         )
         return

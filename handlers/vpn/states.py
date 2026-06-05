@@ -11,8 +11,12 @@ from core.constants import (
     STATE_WALLET_RECEIPT,
     STATE_BALE_ID,
     BTN_BACK,
+    CARD_NUMBER,
+    CARD_HOLDER,
 )
-from core.keyboards import get_main_menu_keyboard
+from core.formatting import msg_e
+from core.database import get_setting
+from core.keyboards import get_main_menu_keyboard, get_back_keyboard
 from core.database import (
     create_payment_request,
     create_bale_request,
@@ -42,8 +46,26 @@ async def process_wallet_state(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(msg("invalid_amount"))
             return True
         amount = int(text)
+        card = CARD_NUMBER or await get_setting("card_number", "")
+        card_name = CARD_HOLDER or await get_setting("card_holder", "VPN")
+        if not card:
+            clear_state(uid)
+            await update.message.reply_text(
+                msg("card_not_set"),
+                reply_markup=get_main_menu_keyboard(),
+            )
+            return True
         set_state(uid, STATE_WALLET_RECEIPT, amount=amount)
-        await update.message.reply_text(msg("upload_receipt"))
+        await update.message.reply_text(
+            msg_e(
+                "wallet_pay_instructions",
+                amount=amount,
+                card=card,
+                card_name=card_name,
+            ),
+            parse_mode="HTML",
+            reply_markup=get_back_keyboard(),
+        )
         return True
 
     if step == STATE_WALLET_RECEIPT:
