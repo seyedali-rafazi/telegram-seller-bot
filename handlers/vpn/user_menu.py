@@ -159,7 +159,12 @@ async def btn_test_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    from services.xui_panel import create_test_client, is_xui_configured, XuiPanelError
+    from services.xui_panel import (
+        create_test_client,
+        is_xui_configured,
+        XuiPanelError,
+        XuiPanelConnectionError,
+    )
 
     if not is_xui_configured():
         await update.message.reply_text(
@@ -172,7 +177,24 @@ async def btn_test_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         result = await create_test_client(uid)
-    except XuiPanelError:
+    except XuiPanelConnectionError as exc:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "test config connection failed for %s: %s", uid, exc
+        )
+        await wait_msg.delete()
+        await update.message.reply_text(
+            msg("test_config_error"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+    except XuiPanelError as exc:
+        import logging
+
+        logging.getLogger(__name__).error(
+            "test config panel error for %s: %s", uid, exc
+        )
         await wait_msg.delete()
         await update.message.reply_text(
             msg("test_config_error"),
