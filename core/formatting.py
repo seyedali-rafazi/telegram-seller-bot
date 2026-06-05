@@ -12,11 +12,17 @@ def h(value) -> str:
     return escape(str(value))
 
 
+# Placeholders that already contain Telegram HTML from format_sub_delivery etc.
+_RAW_HTML_KEYS = frozenset({"sub_body"})
+
+
 def msg_e(key: str, **kwargs) -> str:
     """Persian message with HTML-escaped string arguments."""
     safe = {}
     for k, v in kwargs.items():
-        if isinstance(v, (int, float)):
+        if k in _RAW_HTML_KEYS:
+            safe[k] = v
+        elif isinstance(v, (int, float)):
             safe[k] = v
         else:
             safe[k] = h(v)
