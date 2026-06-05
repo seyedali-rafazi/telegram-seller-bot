@@ -34,7 +34,6 @@ from core.database import (
     get_user_test_config,
     assign_test_config_to_user,
     get_user_pending_bale_request,
-    get_user_latest_approved_bale,
 )
 
 
@@ -135,19 +134,6 @@ async def btn_bale_subscription(update: Update, context: ContextTypes.DEFAULT_TY
     if pending:
         await update.message.reply_text(
             msg("bale_sub_pending_wait"),
-            reply_markup=get_main_menu_keyboard(),
-        )
-        return
-    approved = await get_user_latest_approved_bale(uid)
-    if approved:
-        _, _, bale_id, sub_url, _ = approved
-        await update.message.reply_text(
-            msg(
-                "bale_sub_active",
-                bale_id=bale_id,
-                sub_body=format_sub_delivery(sub_url),
-            ),
-            parse_mode="HTML",
             reply_markup=get_main_menu_keyboard(),
         )
         return

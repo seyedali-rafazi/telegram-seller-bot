@@ -671,6 +671,7 @@ async def process_admin_state(
                 text=msg_e(
                     "bale_sub_approved_user",
                     bale_id=extra["bale_id"],
+                    date=(extra.get("reviewed_at") or "")[:10] or "—",
                     sub_body=sub_body,
                 ),
                 parse_mode="HTML",

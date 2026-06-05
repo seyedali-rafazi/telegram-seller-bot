@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from core.messages import msg
 from core.formatting import msg_e, h, format_sub_delivery
 from core.keyboards import get_main_menu_keyboard
-from core.database import get_wallet_balance, get_user_info
+from core.database import get_wallet_balance, get_user_info, get_bale_request
 from core.database.user_orders import (
     get_user_pending_orders_detailed,
     get_user_orders_history,
@@ -14,6 +14,7 @@ from core.database.user_orders import (
     get_subscription_by_id,
     count_user_orders_by_status,
 )
+from core.database.bale_requests import get_user_bale_requests, count_user_bale_by_status
 from core.database.orders import get_order
 
 
@@ -35,15 +36,37 @@ def user_hub_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+async def _hub_counts(uid: str):
+    order_counts = await count_user_orders_by_status(uid)
+    bale_counts = await count_user_bale_by_status(uid)
+    return {
+        "pending": order_counts["pending"] + bale_counts["pending"],
+        "approved": order_counts["approved"] + bale_counts["approved"],
+        "rejected": order_counts["rejected"],
+        "order_pending": order_counts["pending"],
+        "bale_pending": bale_counts["pending"],
+    }
+
+
+async def _hub_text(uid: str) -> str:
+    counts = await _hub_counts(uid)
+    lines = [
+        "📋 **سفارش‌ها و ساب**",
+        "",
+        f"⏳ در انتظار: **{counts['pending']}**",
+        f"✅ تحویل‌شده: **{counts['approved']}**",
+        f"❌ رد شده: **{counts['rejected']}**",
+    ]
+    if counts["bale_pending"]:
+        lines.append(f"  _(شامل {counts['bale_pending']} درخواست بله)_")
+    return "\n".join(lines)
+
+
 async def btn_orders_hub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_chat.id)
-    counts = await count_user_orders_by_status(uid)
+    text = await _hub_text(uid)
     await update.message.reply_text(
-        f"📋 **سفارش‌ها و ساب**\n\n"
-        f"⏳ در انتظار: **{counts['pending']}**\n"
-        f"✅ تحویل‌شده: **{counts['approved']}**\n"
-        f"❌ رد شده: **{counts['rejected']}**\n\n"
-        "گزینه را انتخاب کنید:",
+        text + "\n\nگزینه را انتخاب کنید:",
         parse_mode="Markdown",
         reply_markup=user_hub_keyboard(),
     )
@@ -56,12 +79,9 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     data = query.data
 
     if data == "usr_hub":
-        counts = await count_user_orders_by_status(uid)
+        text = await _hub_text(uid)
         await query.edit_message_text(
-            f"📋 **سفارش‌ها و ساب**\n\n"
-            f"⏳ در انتظار: **{counts['pending']}**\n"
-            f"✅ تحویل‌شده: **{counts['approved']}**\n"
-            f"❌ رد شده: **{counts['rejected']}**",
+            text,
             parse_mode="Markdown",
             reply_markup=user_hub_keyboard(),
         )
@@ -110,8 +130,9 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if data == "usr_pending":
-        rows = await get_user_pending_orders_detailed(uid)
-        if not rows:
+        orders = await get_user_pending_orders_detailed(uid)
+        bale_rows = await get_user_bale_requests(uid, status="pending")
+        if not orders and not bale_rows:
             await query.edit_message_text(
                 "⏳ سفارش در انتظاری ندارید.",
                 reply_markup=InlineKeyboardMarkup(
@@ -120,10 +141,13 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         lines = ["⏳ **در انتظار ارسال ساب توسط ادمین:**\n"]
-        for r in rows:
+        for r in orders:
             lines.append(
                 f"• `{r[1]}` — {r[2]} — {r[3]:,} تومان — {r[4][:10]}"
             )
+        for r in bale_rows:
+            _, code, bale_id, _, _, created, _ = r
+            lines.append(f"• `{code}` — 🔗 بله — شناسه `{bale_id}` — {created[:10]}")
         await query.edit_message_text(
             "\n".join(lines),
             parse_mode="Markdown",
@@ -134,9 +158,11 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if data == "usr_configs":
-        rows = await get_user_subscriptions_all(uid)
-        live = [r for r in rows if r[6] == 1]
-        if not live:
+        paid_rows = await get_user_subscriptions_all(uid)
+        paid_live = [r for r in paid_rows if r[6] == 1]
+        bale_rows = await get_user_bale_requests(uid, status="approved")
+        bale_with_sub = [r for r in bale_rows if r[4]]
+        if not paid_live and not bale_with_sub:
             await query.edit_message_text(
                 "🔗 ساب فعالی ندارید.",
                 reply_markup=InlineKeyboardMarkup(
@@ -145,27 +171,40 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         kb = []
-        for s in live:
-            sub_id, code, pname, expires, _, _, _ = s
+        for s in paid_live:
+            sub_id, code, pname, _, _, _, _ = s
             kb.append(
                 [
                     InlineKeyboardButton(
-                        f"🔗 {code} — {pname}",
+                        f"💰 {code} — {pname}",
                         callback_data=f"usr_sub_{sub_id}",
+                    )
+                ]
+            )
+        for r in bale_with_sub:
+            rid, code, bale_id, _, _, _, reviewed = r
+            date = (reviewed or "")[:10] or "—"
+            kb.append(
+                [
+                    InlineKeyboardButton(
+                        f"🔗 {code} — بله {bale_id} — {date}",
+                        callback_data=f"usr_bale_{rid}",
                     )
                 ]
             )
         kb.append([InlineKeyboardButton("🔙 بازگشت", callback_data="usr_hub")])
         await query.edit_message_text(
-            "🔗 **ساب‌های فعال** — برای مشاهده لینک کلیک کنید:",
+            "🔗 **ساب‌های من** — برای مشاهده لینک کلیک کنید:\n"
+            "💰 = خرید پولی | 🔗 = اشتراک بله",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(kb),
         )
         return
 
     if data == "usr_history":
-        rows = await get_user_orders_history(uid, limit=25)
-        if not rows:
+        order_rows = await get_user_orders_history(uid, limit=25)
+        bale_rows = await get_user_bale_requests(uid, status="approved")
+        if not order_rows and not bale_rows:
             await query.edit_message_text(
                 "📜 تاریخچه‌ای وجود ندارد.",
                 reply_markup=InlineKeyboardMarkup(
@@ -174,8 +213,8 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         kb = []
-        lines = ["📜 **تاریخچه سفارش‌ها:**\n"]
-        for r in rows[:20]:
+        lines = ["📜 **تاریخچه:**\n"]
+        for r in order_rows[:20]:
             oid, code, status, pname, amount, created, cfg, _ = r
             st = STATUS_FA.get(status, status)
             lines.append(f"• `{code}` — {st} — {pname}")
@@ -188,11 +227,54 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                         )
                     ]
                 )
+        for r in bale_rows:
+            rid, code, bale_id, _, sub_url, created, reviewed = r
+            if not sub_url:
+                continue
+            date = (reviewed or created or "")[:10] or "—"
+            lines.append(f"• `{code}` — ✅ بله — شناسه `{bale_id}` — {date}")
+            kb.append(
+                [
+                    InlineKeyboardButton(
+                        f"👁 بله {code}",
+                        callback_data=f"usr_bale_{rid}",
+                    )
+                ]
+            )
         kb.append([InlineKeyboardButton("🔙 بازگشت", callback_data="usr_hub")])
         await query.edit_message_text(
             "\n".join(lines),
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(kb),
+        )
+        return
+
+    if data.startswith("usr_bale_"):
+        request_id = int(data.replace("usr_bale_", ""))
+        req = await get_bale_request(request_id)
+        if not req or str(req["user_id"]) != uid or req["status"] != "approved":
+            await query.answer("یافت نشد", show_alert=True)
+            return
+        sub_url = req["sub_url"]
+        if not sub_url:
+            await query.answer("ساب موجود نیست", show_alert=True)
+            return
+        date = (req["reviewed_at"] or "")[:10] or "—"
+        text = msg_e(
+            "bale_sub_approved_user",
+            bale_id=req["bale_id"],
+            date=date,
+            sub_body=format_sub_delivery(sub_url),
+        )
+        await query.edit_message_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔙 ساب‌ها", callback_data="usr_configs")],
+                    [InlineKeyboardButton("📋 منو", callback_data="usr_hub")],
+                ]
+            ),
         )
         return
 

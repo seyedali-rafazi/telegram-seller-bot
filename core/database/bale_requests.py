@@ -36,6 +36,50 @@ async def get_user_latest_approved_bale(user_id: str):
         return await cursor.fetchone()
 
 
+async def get_user_bale_requests(
+    user_id: str, status: str | None = None, limit: int = 30
+):
+    conn = await get_db()
+    if status:
+        async with conn.execute(
+            """
+            SELECT id, public_id, bale_id, status, sub_url, created_at, reviewed_at
+            FROM bale_sub_requests
+            WHERE user_id = ? AND status = ?
+            ORDER BY id DESC LIMIT ?
+            """,
+            (user_id, status, limit),
+        ) as cursor:
+            return await cursor.fetchall()
+    async with conn.execute(
+        """
+        SELECT id, public_id, bale_id, status, sub_url, created_at, reviewed_at
+        FROM bale_sub_requests
+        WHERE user_id = ?
+        ORDER BY id DESC LIMIT ?
+        """,
+        (user_id, limit),
+    ) as cursor:
+        return await cursor.fetchall()
+
+
+async def count_user_bale_by_status(user_id: str) -> dict:
+    conn = await get_db()
+    counts = {"pending": 0, "approved": 0}
+    async with conn.execute(
+        """
+        SELECT status, COUNT(*) FROM bale_sub_requests
+        WHERE user_id = ? AND status IN ('pending', 'approved')
+        GROUP BY status
+        """,
+        (user_id,),
+    ) as cursor:
+        for status, cnt in await cursor.fetchall():
+            if status in counts:
+                counts[status] = cnt
+    return counts
+
+
 async def get_approved_history_by_bale_id(
     bale_id: str, exclude_request_id: int | None = None, limit: int = 5
 ):
@@ -230,4 +274,5 @@ async def fulfill_bale_request(
         "bale_id": req["bale_id"],
         "sub_url": sub_url,
         "public_id": req["public_id"] or bale_request_public_id(request_id),
+        "reviewed_at": now,
     }
