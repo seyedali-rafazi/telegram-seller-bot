@@ -13,7 +13,7 @@ from core.constants import (
     BTN_BACK,
 )
 from core.keyboards import get_main_menu_keyboard
-from core.database import create_payment_request
+from core.database import create_payment_request, create_bale_request
 from handlers.vpn.user_menu import btn_back
 
 
@@ -117,11 +117,16 @@ async def process_bale_sub_state(
         reply_markup=get_main_menu_keyboard(),
     )
 
+    request = await create_bale_request(uid, bale_id)
+    request_id = request["id"]
+    request_code = request["public_id"]
+
     from handlers.admin.user_panel import build_user_summary_text
 
     summary = await build_user_summary_text(uid)
     admin_text = (
         f"🔗 <b>درخواست اشتراک بله</b>\n\n"
+        f"کد: <code>{request_code}</code>\n"
         f"🆔 شناسه بله: <code>{bale_id}</code>\n\n"
         f"{summary}"
     )
@@ -129,9 +134,15 @@ async def process_bale_sub_state(
         [
             [
                 InlineKeyboardButton(
+                    "📤 ارسال ساب",
+                    callback_data=f"adm_bale_send_{request_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "👤 پروفایل کاربر", callback_data=f"adm_uhome_{uid}"
                 )
-            ]
+            ],
         ]
     )
     await notify_admins(context, text=admin_text, reply_markup=kb, parse_mode="HTML")

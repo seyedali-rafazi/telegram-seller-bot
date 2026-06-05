@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from core.messages import msg
-from core.formatting import msg_e, h
+from core.formatting import msg_e, h, format_sub_delivery
 from core.keyboards import get_main_menu_keyboard
 from core.database import get_wallet_balance, get_user_info
 from core.database.user_orders import (
@@ -18,7 +18,7 @@ from core.database.orders import get_order
 
 
 STATUS_FA = {
-    "pending": "⏳ در انتظار کانفیگ",
+    "pending": "⏳ در انتظار ساب",
     "approved": "✅ تحویل شده",
     "rejected": "❌ رد شده",
 }
@@ -28,7 +28,7 @@ def user_hub_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("⏳ سفارش‌های در انتظار", callback_data="usr_pending")],
-            [InlineKeyboardButton("🔗 کانفیگ‌های من", callback_data="usr_configs")],
+            [InlineKeyboardButton("🔗 ساب‌های من", callback_data="usr_configs")],
             [InlineKeyboardButton("📜 تاریخچه سفارش‌ها", callback_data="usr_history")],
             [InlineKeyboardButton("👤 خلاصه حساب", callback_data="usr_summary")],
         ]
@@ -39,7 +39,7 @@ async def btn_orders_hub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_chat.id)
     counts = await count_user_orders_by_status(uid)
     await update.message.reply_text(
-        f"📋 **سفارش‌ها و کانفیگ‌ها**\n\n"
+        f"📋 **سفارش‌ها و ساب**\n\n"
         f"⏳ در انتظار: **{counts['pending']}**\n"
         f"✅ تحویل‌شده: **{counts['approved']}**\n"
         f"❌ رد شده: **{counts['rejected']}**\n\n"
@@ -58,7 +58,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if data == "usr_hub":
         counts = await count_user_orders_by_status(uid)
         await query.edit_message_text(
-            f"📋 **سفارش‌ها و کانفیگ‌ها**\n\n"
+            f"📋 **سفارش‌ها و ساب**\n\n"
             f"⏳ در انتظار: **{counts['pending']}**\n"
             f"✅ تحویل‌شده: **{counts['approved']}**\n"
             f"❌ رد شده: **{counts['rejected']}**",
@@ -119,7 +119,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 ),
             )
             return
-        lines = ["⏳ **در انتظار ارسال کانفیگ توسط ادمین:**\n"]
+        lines = ["⏳ **در انتظار ارسال ساب توسط ادمین:**\n"]
         for r in rows:
             lines.append(
                 f"• `{r[1]}` — {r[2]} — {r[3]:,} تومان — {r[4][:10]}"
@@ -138,7 +138,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         live = [r for r in rows if r[6] == 1]
         if not live:
             await query.edit_message_text(
-                "🔗 کانفیگ فعالی ندارید.",
+                "🔗 ساب فعالی ندارید.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("🔙 بازگشت", callback_data="usr_hub")]]
                 ),
@@ -157,7 +157,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         kb.append([InlineKeyboardButton("🔙 بازگشت", callback_data="usr_hub")])
         await query.edit_message_text(
-            "🔗 **کانفیگ‌های فعال** — برای مشاهده لینک کلیک کنید:",
+            "🔗 **ساب‌های فعال** — برای مشاهده لینک کلیک کنید:",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(kb),
         )
@@ -183,7 +183,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 kb.append(
                     [
                         InlineKeyboardButton(
-                            f"👁 کانفیگ {code}",
+                            f"👁 ساب {code}",
                             callback_data=f"usr_ord_{oid}",
                         )
                     ]
@@ -207,17 +207,16 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         text = msg_e(
             "order_approved_user",
             order_code=code,
-            sub_code=code,
             name=sub["plan_name"],
             expires=sub["expires_at"][:10],
-            config=cfg,
+            sub_body=format_sub_delivery(cfg),
         )
         await query.edit_message_text(
             text,
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
-                    [InlineKeyboardButton("🔙 کانفیگ‌ها", callback_data="usr_configs")],
+                    [InlineKeyboardButton("🔙 ساب‌ها", callback_data="usr_configs")],
                     [InlineKeyboardButton("📋 منو", callback_data="usr_hub")],
                 ]
             ),
@@ -231,7 +230,7 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.answer("یافت نشد", show_alert=True)
             return
         if order["status"] != "approved" or not order["config_text"]:
-            await query.answer("کانفیگ موجود نیست", show_alert=True)
+            await query.answer("ساب موجود نیست", show_alert=True)
             return
         from core.database.plans import get_plan
 
@@ -240,10 +239,9 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         text = msg_e(
             "order_approved_user",
             order_code=order["public_id"],
-            sub_code=order["public_id"],
             name=pname,
             expires=(order["reviewed_at"] or "")[:10],
-            config=order["config_text"],
+            sub_body=format_sub_delivery(order["config_text"]),
         )
         await query.edit_message_text(
             text,

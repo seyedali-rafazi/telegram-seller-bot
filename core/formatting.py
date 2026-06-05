@@ -21,3 +21,7 @@ def msg_e(key: str, **kwargs) -> str:
         else:
             safe[k] = h(v)
     return msg(key, **safe)
+
+
+def format_sub_delivery(sub_url: str) -> str:
+    return msg_e("sub_link_body", sub_url=sub_url)

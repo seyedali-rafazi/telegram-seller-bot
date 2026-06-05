@@ -27,7 +27,7 @@ MESSAGES = {
         "پلن: {name}\n"
         "مبلغ: {price:,} تومان (از کیف پول کسر شد)\n"
         "موجودی باقی‌مانده: <b>{new_balance:,}</b> تومان\n\n"
-        "پس از بررسی ادمین، لینک VPN برای شما ارسال می‌شود."
+        "پس از بررسی ادمین، لینک اشتراک (Subscription) برای شما ارسال می‌شود."
     ),
     "too_many_pending": (
         "❌ شما {count} سفارش در انتظار دارید.\n"
@@ -36,11 +36,17 @@ MESSAGES = {
     "order_pending_line": "⏳ {order_code} — {name} ({price:,} تومان)",
     "order_approved_user": (
         "✅ سفارش <code>{order_code}</code> تأیید شد.\n\n"
-        "کد اشتراک: <code>{sub_code}</code>\n"
         "پلن: {name}\n"
         "اعتبار تا: {expires}\n\n"
-        "🔗 کانفیگ VPN:\n\n"
-        "<code>{config}</code>"
+        "{sub_body}"
+    ),
+    "sub_link_body": (
+        "🔗 <b>لینک اشتراک (Subscription):</b>\n\n"
+        "<code>{sub_url}</code>\n\n"
+        "📱 <b>نحوه استفاده:</b>\n"
+        "۱. لینک بالا را کپی کنید.\n"
+        "۲. در v2rayNG / Hiddify / Streisand به‌عنوان Subscription اضافه کنید.\n"
+        "۳. Update / بروزرسانی بزنید تا کانفیگ‌ها از ساب لود شوند."
     ),
     "order_rejected_user": (
         "❌ سفارش <code>{order_code}</code> رد شد.\n"
@@ -79,15 +85,14 @@ MESSAGES = {
     ),
     "support_guide": (
         "📖 <b>راهنمای اتصال VPN</b>\n\n"
-        "<b>اندروید:</b>\n"
-        "۱. اپ v2rayNG یا Hiddify را نصب کنید.\n"
-        "۲. کانفیگ دریافتی را کپی کنید.\n"
-        "۳. از منو Import from clipboard را بزنید.\n"
-        "۴. اتصال را فعال کنید.\n\n"
-        "<b>iOS:</b>\n"
-        "۱. Streisand یا V2Box را از App Store نصب کنید.\n"
-        "۲. لینک کانفیگ را import کنید.\n"
-        "۳. Allow VPN Configuration را تأیید کنید.\n\n"
+        "<b>اندروید (v2rayNG / Hiddify):</b>\n"
+        "۱. لینک Subscription را از ربات کپی کنید.\n"
+        "۲. در اپ: Subscription → + → Paste link\n"
+        "۳. Update بزنید و یک کانفیگ را انتخاب کنید.\n\n"
+        "<b>iOS (Streisand / V2Box):</b>\n"
+        "۱. لینک Subscription را import کنید.\n"
+        "۲. Subscription را بروزرسانی کنید.\n"
+        "۳. اتصال را فعال کنید.\n\n"
         "برای سوالات بیشتر با ادمین تماس بگیرید."
     ),
     "contact_admin": "💬 تماس با ادمین",
@@ -105,26 +110,25 @@ MESSAGES = {
     "bale_sub_invalid_id": "❌ شناسه نامعتبر است. فقط عدد ارسال کنید.",
     "bale_sub_received": (
         "✅ درخواست شما ثبت شد.\n\n"
-        "پس از بررسی، لینک کانفیگ VPN برای شما ارسال می‌شود."
+        "پس از بررسی، لینک اشتراک (Subscription) برای شما ارسال می‌شود."
+    ),
+    "bale_sub_approved_user": (
+        "✅ درخواست اشتراک بله تأیید شد.\n\n"
+        "شناسه بله: <code>{bale_id}</code>\n\n"
+        "{sub_body}"
     ),
     "test_config_success": (
-        "🧪 <b>کانفیگ تست</b>\n\n"
-        "حجم: <b>{traffic_mb} مگابایت</b> (یک‌بار برای هر کاربر)\n\n"
-        "🔗 لینک اشتراک:\n\n"
-        "<code>{sub_url}</code>\n\n"
-        "این لینک را در اپ VPN (Hiddify / v2rayNG / Streisand) import کنید."
+        "🧪 <b>ساب تست</b>\n\n"
+        "یک‌بار برای هر کاربر\n\n"
+        "{sub_body}"
     ),
     "test_config_already_used": (
-        "ℹ️ شما قبلاً کانفیگ تست دریافت کرده‌اید.\n\n"
-        "🔗 لینک اشتراک:\n\n"
-        "<code>{sub_url}</code>"
+        "ℹ️ شما قبلاً ساب تست دریافت کرده‌اید.\n\n"
+        "{sub_body}"
     ),
-    "test_config_error": (
-        "❌ ساخت کانفیگ تست ممکن نشد.\n"
-        "لطفاً کمی بعد دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
-    ),
-    "test_config_not_configured": (
-        "⚠️ سرویس تست موقتاً در دسترس نیست. با پشتیبانی تماس بگیرید."
+    "test_config_empty": (
+        "❌ در حال حاضر ساب تست موجود نیست.\n\n"
+        "لطفاً چند ساعت دیگر دوباره تلاش کنید."
     ),
 }
 

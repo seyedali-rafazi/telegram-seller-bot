@@ -7,30 +7,79 @@ from .utils import get_tehran_now_full
 async def get_user_test_config(user_id: str):
     conn = await get_db()
     async with conn.execute(
-        """
-        SELECT sub_url, client_email, sub_id, created_at
-        FROM test_configs WHERE user_id = ?
-        """,
+        "SELECT sub_url FROM test_configs WHERE user_id = ?",
         (user_id,),
     ) as cursor:
         return await cursor.fetchone()
 
 
-async def save_user_test_config(
-    user_id: str, sub_url: str, client_email: str, sub_id: str
-):
+async def assign_test_config_to_user(user_id: str) -> str | None:
+    """Return sub_url for user. Reuses existing assignment or takes next free pool item."""
+    existing = await get_user_test_config(user_id)
+    if existing:
+        return existing[0]
+
     conn = await get_db()
     now = get_tehran_now_full()
+    async with conn.execute(
+        """
+        SELECT id, sub_url FROM test_config_pool
+        WHERE is_assigned = 0 ORDER BY id ASC LIMIT 1
+        """
+    ) as cursor:
+        row = await cursor.fetchone()
+    if not row:
+        return None
+
+    pool_id, sub_url = row[0], row[1]
     await conn.execute(
         """
-        INSERT INTO test_configs (user_id, sub_url, client_email, sub_id, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            sub_url = excluded.sub_url,
-            client_email = excluded.client_email,
-            sub_id = excluded.sub_id,
-            created_at = excluded.created_at
+        UPDATE test_config_pool
+        SET is_assigned = 1, assigned_to = ?, assigned_at = ?
+        WHERE id = ? AND is_assigned = 0
         """,
-        (user_id, sub_url, client_email, sub_id, now),
+        (user_id, now, pool_id),
+    )
+    await conn.execute(
+        """
+        INSERT INTO test_configs (user_id, sub_url, pool_id, created_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (user_id, sub_url, pool_id, now),
     )
     await conn.commit()
+    return sub_url
+
+
+async def add_test_configs_bulk(lines: list[str]) -> int:
+    conn = await get_db()
+    now = get_tehran_now_full()
+    added = 0
+    for line in lines:
+        text = line.strip()
+        if not text or len(text) < 10:
+            continue
+        await conn.execute(
+            """
+            INSERT INTO test_config_pool (sub_url, is_assigned, created_at)
+            VALUES (?, 0, ?)
+            """,
+            (text, now),
+        )
+        added += 1
+    await conn.commit()
+    return added
+
+
+async def count_available_test_configs() -> int:
+    conn = await get_db()
+    async with conn.execute(
+        "SELECT COUNT(*) FROM test_config_pool WHERE is_assigned = 0"
+    ) as cursor:
+        return (await cursor.fetchone())[0]
+
+
+async def count_total_test_configs() -> int:
+    conn = await get_db()
+    async with conn.execute("SELECT COUNT(*) FROM test_config_pool") as cursor:
+        return (await cursor.fetchone())[0]

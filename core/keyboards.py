@@ -68,8 +68,14 @@ def get_admin_menu_keyboard():
                 InlineKeyboardButton("💳 تأیید پرداخت‌ها", callback_data="adm_payments"),
                 InlineKeyboardButton("🛒 سفارش‌ها", callback_data="adm_orders"),
             ],
+            [
+                InlineKeyboardButton("🔗 اشتراک بله", callback_data="adm_bale_requests"),
+            ],
             [InlineKeyboardButton("📦 مدیریت پلن‌ها", callback_data="adm_plans")],
-            [InlineKeyboardButton("🔗 کانفیگ‌ها", callback_data="adm_configs")],
+            [
+                InlineKeyboardButton("🔗 ساب پولی", callback_data="adm_configs"),
+                InlineKeyboardButton("🧪 ساب تست", callback_data="adm_test_configs"),
+            ],
             [InlineKeyboardButton("📢 پیام همگانی", callback_data="adm_broadcast")],
             [InlineKeyboardButton("📊 آمار", callback_data="adm_stats")],
         ]

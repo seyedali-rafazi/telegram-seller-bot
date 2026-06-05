@@ -197,7 +197,7 @@ async def admin_user_panel_callback(
         )
         await query.edit_message_text(
             f"⏳ <b>سفارش‌های در انتظار</b> — <code>{h(user_id)}</code>\n\n"
-            "روی 📤 بزنید → پیام بعدی لینک VPN را بفرستید:",
+            "روی 📤 بزنید → پیام بعدی لینک Subscription را بفرستید:",
             parse_mode=PARSE,
             reply_markup=InlineKeyboardMarkup(kb),
         )
@@ -277,11 +277,11 @@ async def admin_user_panel_callback(
         set_state(_admin_key(), STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
         code = order["public_id"]
         await query.edit_message_text(
-            f"📤 <b>ارسال کانفیگ</b>\n\n"
+            f"📤 <b>ارسال ساب</b>\n\n"
             f"کد: <code>{h(code)}</code>\n"
             f"کاربر: <code>{h(order['user_id'])}</code>\n"
             f"مبلغ: {order['amount']:,} تومان\n\n"
-            f"⏳ <b>لینک VPN را در پیام بعدی بفرستید.</b>",
+            f"⏳ <b>لینک Subscription را در پیام بعدی بفرستید.</b>",
             parse_mode=PARSE,
             reply_markup=None,
         )
@@ -311,7 +311,7 @@ async def admin_user_panel_callback(
             f"پلن: {h(pname)}\n"
             f"مبلغ: {order['amount']:,} تومان\n"
             f"تاریخ: {h(order['created_at'][:16])}\n\n"
-            f"🔗 <b>کانفیگ ارسال‌شده:</b>\n\n"
+            f"🔗 <b>ساب ارسال‌شده:</b>\n\n"
             f"<code>{h(cfg)}</code>"
         )
         await query.edit_message_text(

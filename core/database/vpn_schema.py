@@ -105,11 +105,47 @@ async def init_vpn_tables():
         CREATE TABLE IF NOT EXISTS test_configs (
             user_id TEXT PRIMARY KEY,
             sub_url TEXT NOT NULL,
-            client_email TEXT,
-            sub_id TEXT,
+            pool_id INTEGER,
             created_at TEXT
         )
     """)
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS test_config_pool (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sub_url TEXT NOT NULL,
+            is_assigned INTEGER DEFAULT 0,
+            assigned_to TEXT,
+            assigned_at TEXT,
+            created_at TEXT
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_test_config_pool_assigned
+        ON test_config_pool(is_assigned)
+    """)
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS bale_sub_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_id TEXT,
+            user_id TEXT NOT NULL,
+            bale_id TEXT NOT NULL,
+            sub_url TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT,
+            reviewed_at TEXT
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_bale_sub_requests_status
+        ON bale_sub_requests(status)
+    """)
+
+    async with conn.execute("PRAGMA table_info(test_configs)") as cursor:
+        test_cols = [column[1] for column in await cursor.fetchall()]
+    if test_cols and "pool_id" not in test_cols:
+        await conn.execute("ALTER TABLE test_configs ADD COLUMN pool_id INTEGER")
 
     async with conn.execute("PRAGMA table_info(user_subscriptions)") as cursor:
         sub_columns = [column[1] for column in await cursor.fetchall()]

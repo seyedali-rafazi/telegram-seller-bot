@@ -12,12 +12,14 @@ from core.state_manager import set_state, clear_state, get_state
 from core.constants import (
     STATE_ADMIN_BROADCAST,
     STATE_ADMIN_CONFIGS,
+    STATE_ADMIN_TEST_CONFIGS,
     STATE_ADMIN_PLAN_NAME,
     STATE_ADMIN_PLAN_DAYS,
     STATE_ADMIN_PLAN_GB,
     STATE_ADMIN_PLAN_PRICE,
     STATE_ADMIN_USER_BALANCE,
     STATE_ADMIN_ORDER_CONFIG,
+    STATE_ADMIN_BALE_SUB,
 )
 from core.database import (
     get_total_users,
@@ -36,6 +38,13 @@ from core.database import (
     reject_payment,
     get_payment,
     add_configs_bulk,
+    add_test_configs_bulk,
+    count_available_test_configs,
+    count_total_test_configs,
+    get_bale_request,
+    fulfill_bale_request,
+    count_pending_bale_requests,
+    get_pending_bale_requests,
     create_plan,
     delete_plan,
     update_plan,
@@ -46,7 +55,7 @@ from core.database import (
     get_wallet_balance,
 )
 from core.database.users import get_user_info
-from core.formatting import msg_e
+from core.formatting import msg_e, format_sub_delivery
 from core.messages import msg
 
 
@@ -64,11 +73,15 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pending_pay = await count_pending_payments()
     pending_ord = await count_pending_orders()
     avail = await count_available_configs()
+    test_avail = await count_available_test_configs()
+    bale_pending = await count_pending_bale_requests()
     await update.message.reply_text(
         f"🛠 **پنل ادمین**\n\n"
         f"پرداخت‌های در انتظار: {pending_pay}\n"
         f"سفارش‌های در انتظار: {pending_ord}\n"
-        f"کانفیگ در انبار: {avail}\n\n"
+        f"درخواست بله: {bale_pending}\n"
+        f"ساب پولی آزاد: {avail}\n"
+        f"ساب تست آزاد: {test_avail}\n\n"
         "گزینه را انتخاب کنید.\n\nراهنما: /help",
         parse_mode="Markdown",
         reply_markup=get_admin_menu_keyboard(),
@@ -95,12 +108,17 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_ord = await count_pending_orders()
         avail = await count_available_configs()
         total_cfg = await count_total_configs()
+        test_avail = await count_available_test_configs()
+        test_total = await count_total_test_configs()
+        bale_pending = await count_pending_bale_requests()
         await query.edit_message_text(
             f"📊 آمار\n\n"
             f"کاربران: {total}\n"
             f"پرداخت معلق: {pending_pay}\n"
             f"سفارش معلق: {pending_ord}\n"
-            f"کانفیگ: {avail} آزاد / {total_cfg} کل"
+            f"درخواست بله: {bale_pending}\n"
+            f"ساب پولی: {avail} آزاد / {total_cfg} کل\n"
+            f"ساب تست: {test_avail} آزاد / {test_total} کل"
         )
         return
 
@@ -117,7 +135,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         lines = [
             "🛒 <b>سفارش‌های در انتظار</b>\n\n"
-            "📤 = ارسال کانفیگ (پیام بعدی لینک VPN)\n"
+            "📤 = ارسال ساب (پیام بعدی لینک Subscription)\n"
             "❌ = رد سفارش | 👤 = پروفایل کاربر\n"
         ]
         for r in rows:
@@ -188,9 +206,83 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_state(_admin_key(), STATE_ADMIN_CONFIGS)
         avail = await count_available_configs()
         await query.edit_message_text(
-            f"🔗 کانفیگ آزاد: {avail}\n\n"
-            "لیست کانفیگ‌ها را ارسال کنید (هر خط یک لینک VLESS/vmess):\n"
+            f"🔗 ساب آزاد (پولی): {avail}\n\n"
+            "هر خط یک لینک Subscription:\n"
+            "مثال: `https://panel.example.com/sub/abc123`\n"
             "یا فایل .txt آپلود کنید."
+        )
+        return
+
+    if data == "adm_bale_requests":
+        rows = await get_pending_bale_requests(15)
+        if not rows:
+            await query.edit_message_text(
+                "✅ درخواست بله معلقی نیست.",
+                reply_markup=get_admin_menu_keyboard(),
+            )
+            return
+        lines = ["🔗 **درخواست‌های اشتراک بله:**\n"]
+        kb = []
+        for r in rows:
+            rid, code, uid, bale_id, created = r[0], r[1], r[2], r[3], r[4]
+            lines.append(
+                f"• `{code}` — بله `{bale_id}` — کاربر `{uid}` — {created[:10]}"
+            )
+            kb.append(
+                [
+                    InlineKeyboardButton(
+                        f"📤 {code}",
+                        callback_data=f"adm_bale_send_{rid}",
+                    ),
+                    InlineKeyboardButton(
+                        "👤",
+                        callback_data=f"adm_uhome_{uid}",
+                    ),
+                ]
+            )
+        kb.append([InlineKeyboardButton("🔙 پنل", callback_data="adm_back")])
+        await query.edit_message_text(
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb),
+        )
+        return
+
+    if data.startswith("adm_bale_send_"):
+        request_id = int(data.replace("adm_bale_send_", ""))
+        req = await get_bale_request(request_id)
+        if not req or req["status"] != "pending":
+            await query.answer("درخواست یافت نشد یا قبلاً بررسی شده", show_alert=True)
+            return
+        set_state(
+            _admin_key(),
+            STATE_ADMIN_BALE_SUB,
+            request_id=request_id,
+        )
+        code = req["public_id"] or f"BALE-{request_id:08d}"
+        await query.edit_message_text(
+            f"📤 <b>ارسال ساب — اشتراک بله</b>\n\n"
+            f"کد: <code>{code}</code>\n"
+            f"کاربر: <code>{req['user_id']}</code>\n"
+            f"شناسه بله: <code>{req['bale_id']}</code>\n\n"
+            f"⏳ <b>لینک Subscription را در پیام بعدی بفرستید.</b>",
+            parse_mode="HTML",
+            reply_markup=None,
+        )
+        return
+
+    if data == "adm_test_configs":
+        set_state(_admin_key(), STATE_ADMIN_TEST_CONFIGS)
+        avail = await count_available_test_configs()
+        total = await count_total_test_configs()
+        await query.edit_message_text(
+            f"🧪 **کانفیگ تست**\n\n"
+            f"آزاد: **{avail}** / کل: **{total}**\n\n"
+            "هر خط یک لینک اشتراک تست (sub URL):\n"
+            "مثال:\n"
+            "`https://panel.example.com/sub/abc123`\n\n"
+            "متن یا فایل `.txt` بفرستید.",
+            parse_mode="Markdown",
         )
         return
 
@@ -252,7 +344,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(
             (query.message.text or query.message.caption or "")
-            + f"\n\n⏳ لینک VPN برای <code>{h(order_code)}</code> را در <b>پیام بعدی</b> ارسال کنید.",
+            + f"\n\n⏳ لینک Subscription برای <code>{h(order_code)}</code> را در <b>پیام بعدی</b> ارسال کنید.",
             parse_mode="HTML",
             reply_markup=None,
         )
@@ -382,7 +474,26 @@ async def process_admin_state(
         added = await add_configs_bulk(lines)
         avail = await count_available_configs()
         await update.message.reply_text(
-            f"✅ {added} کانفیگ اضافه شد.\nکانفیگ آزاد: {avail}"
+            f"✅ {added} ساب اضافه شد.\nساب آزاد: {avail}"
+        )
+        return True
+
+    if step == STATE_ADMIN_TEST_CONFIGS:
+        clear_state(_admin_key())
+        if update.message.document:
+            doc = await update.message.document.get_file()
+            content = (await doc.download_as_bytearray()).decode(
+                "utf-8", errors="ignore"
+            )
+            lines = content.splitlines()
+        else:
+            lines = text.splitlines()
+        added = await add_test_configs_bulk(lines)
+        avail = await count_available_test_configs()
+        total = await count_total_test_configs()
+        await update.message.reply_text(
+            f"✅ {added} کانفیگ تست اضافه شد.\n"
+            f"آزاد: {avail} / کل: {total}"
         )
         return True
 
@@ -430,22 +541,24 @@ async def process_admin_state(
         ok, reason, extra = await fulfill_purchase_order(order_id, text)
         if not ok:
             if reason == "invalid_config":
-                await update.message.reply_text("❌ لینک کانفیگ خیلی کوتاه است.")
+                await update.message.reply_text(
+                    "❌ لینک Subscription نامعتبر است (حداقل ۱۰ کاراکتر)."
+                )
             else:
                 await update.message.reply_text(f"❌ خطا: {reason}")
             return True
 
         user_id = extra["user_id"]
+        sub_body = format_sub_delivery(extra["config"])
         try:
             await context.bot.send_message(
                 chat_id=user_id,
                 text=msg_e(
                     "order_approved_user",
                     order_code=extra["order_public_id"],
-                    sub_code=extra["subscription_public_id"],
                     name=extra["name"],
                     expires=extra["expires"],
-                    config=extra["config"],
+                    sub_body=sub_body,
                 ),
                 parse_mode="HTML",
             )
@@ -453,8 +566,39 @@ async def process_admin_state(
             pass
         await update.message.reply_text(
             f"✅ سفارش {extra['order_public_id']} تکمیل شد.\n"
-            f"اشتراک: {extra['subscription_public_id']}\n"
-            f"کاربر: {user_id}"
+            f"ساب برای کاربر {user_id} ارسال شد."
+        )
+        return True
+
+    if step == STATE_ADMIN_BALE_SUB:
+        request_id = state.get("request_id")
+        clear_state(_admin_key())
+        ok, reason, extra = await fulfill_bale_request(request_id, text)
+        if not ok:
+            if reason == "invalid_sub":
+                await update.message.reply_text(
+                    "❌ لینک Subscription نامعتبر است (حداقل ۱۰ کاراکتر)."
+                )
+            else:
+                await update.message.reply_text(f"❌ خطا: {reason}")
+            return True
+
+        user_id = extra["user_id"]
+        sub_body = format_sub_delivery(extra["sub_url"])
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=msg_e(
+                    "bale_sub_approved_user",
+                    bale_id=extra["bale_id"],
+                    sub_body=sub_body,
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        await update.message.reply_text(
+            f"✅ {extra['public_id']} — ساب برای کاربر {user_id} ارسال شد."
         )
         return True
 

@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.messages import msg
-from core.formatting import msg_e, h
+from core.formatting import msg_e, h, format_sub_delivery
 from core.constants import (
     BTN_BUY,
     BTN_ACCOUNT,
@@ -35,7 +35,7 @@ from core.database import (
     get_user_pending_orders,
     get_setting,
     get_user_test_config,
-    save_user_test_config,
+    assign_test_config_to_user,
 )
 
 
@@ -151,82 +151,26 @@ async def btn_test_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_chat.id)
     existing = await get_user_test_config(uid)
     if existing:
-        sub_url = existing[0]
         await update.message.reply_text(
-            msg("test_config_already_used", sub_url=sub_url),
+            msg(
+                "test_config_already_used",
+                sub_body=format_sub_delivery(existing[0]),
+            ),
             parse_mode="HTML",
             reply_markup=get_main_menu_keyboard(),
         )
         return
 
-    from services.xui_panel import (
-        create_test_client,
-        is_xui_configured,
-        XuiPanelError,
-        XuiPanelConnectionError,
-    )
-
-    if not is_xui_configured():
+    sub_url = await assign_test_config_to_user(uid)
+    if not sub_url:
         await update.message.reply_text(
-            msg("test_config_not_configured"),
+            msg("test_config_empty"),
             reply_markup=get_main_menu_keyboard(),
         )
         return
 
-    wait_msg = await update.message.reply_text("⏳ در حال ساخت کانفیگ تست…")
-
-    try:
-        result = await create_test_client(uid)
-    except XuiPanelConnectionError as exc:
-        import logging
-
-        logging.getLogger(__name__).error(
-            "test config connection failed for %s: %s", uid, exc
-        )
-        await wait_msg.delete()
-        await update.message.reply_text(
-            msg("test_config_error"),
-            reply_markup=get_main_menu_keyboard(),
-        )
-        return
-    except XuiPanelError as exc:
-        import logging
-
-        logging.getLogger(__name__).error(
-            "test config panel error for %s: %s", uid, exc
-        )
-        await wait_msg.delete()
-        await update.message.reply_text(
-            msg("test_config_error"),
-            reply_markup=get_main_menu_keyboard(),
-        )
-        return
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception(
-            "test config creation failed for %s", uid
-        )
-        await wait_msg.delete()
-        await update.message.reply_text(
-            msg("test_config_error"),
-            reply_markup=get_main_menu_keyboard(),
-        )
-        return
-
-    await save_user_test_config(
-        uid,
-        result["sub_url"],
-        result["client_email"],
-        result["sub_id"],
-    )
-    await wait_msg.delete()
     await update.message.reply_text(
-        msg(
-            "test_config_success",
-            sub_url=result["sub_url"],
-            traffic_mb=result["traffic_mb"],
-        ),
+        msg("test_config_success", sub_body=format_sub_delivery(sub_url)),
         parse_mode="HTML",
         reply_markup=get_main_menu_keyboard(),
     )
