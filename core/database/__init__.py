@@ -38,6 +38,11 @@ from .bale_requests import (
     fulfill_bale_request,
     count_pending_bale_requests,
     get_pending_bale_requests,
+    get_user_pending_bale_request,
+    get_approved_history_by_bale_id,
+    get_approved_history_by_user_id,
+    has_prior_bale_approval,
+    build_bale_admin_history_text,
 )
 from .test_configs import (
     get_user_test_config,

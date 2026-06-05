@@ -13,7 +13,14 @@ from core.constants import (
     BTN_BACK,
 )
 from core.keyboards import get_main_menu_keyboard
-from core.database import create_payment_request, create_bale_request
+from core.database import (
+    create_payment_request,
+    create_bale_request,
+    get_user_pending_bale_request,
+    get_approved_history_by_bale_id,
+    get_approved_history_by_user_id,
+    build_bale_admin_history_text,
+)
 from handlers.vpn.user_menu import btn_back
 
 
@@ -111,6 +118,15 @@ async def process_bale_sub_state(
         await update.message.reply_text(msg("bale_sub_invalid_id"))
         return True
 
+    pending = await get_user_pending_bale_request(uid)
+    if pending:
+        clear_state(uid)
+        await update.message.reply_text(
+            msg("bale_sub_pending_wait"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return True
+
     clear_state(uid)
     await update.message.reply_text(
         msg("bale_sub_received"),
@@ -121,6 +137,15 @@ async def process_bale_sub_state(
     request_id = request["id"]
     request_code = request["public_id"]
 
+    bale_history = await get_approved_history_by_bale_id(bale_id, exclude_request_id=request_id)
+    user_history = await get_approved_history_by_user_id(uid, exclude_request_id=request_id)
+    history_text = build_bale_admin_history_text(
+        bale_history,
+        user_history,
+        current_bale_id=bale_id,
+        current_user_id=uid,
+    )
+
     from handlers.admin.user_panel import build_user_summary_text
 
     summary = await build_user_summary_text(uid)
@@ -128,6 +153,7 @@ async def process_bale_sub_state(
         f"🔗 <b>درخواست اشتراک بله</b>\n\n"
         f"کد: <code>{request_code}</code>\n"
         f"🆔 شناسه بله: <code>{bale_id}</code>\n\n"
+        f"{history_text}\n\n"
         f"{summary}"
     )
     kb = InlineKeyboardMarkup(

@@ -141,6 +141,14 @@ async def init_vpn_tables():
         CREATE INDEX IF NOT EXISTS idx_bale_sub_requests_status
         ON bale_sub_requests(status)
     """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_bale_sub_requests_user_status
+        ON bale_sub_requests(user_id, status)
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_bale_sub_requests_bale_status
+        ON bale_sub_requests(bale_id, status)
+    """)
 
     async with conn.execute("PRAGMA table_info(test_configs)") as cursor:
         test_cols = [column[1] for column in await cursor.fetchall()]

@@ -36,6 +36,7 @@ from core.database import (
     get_setting,
     get_user_test_config,
     assign_test_config_to_user,
+    get_user_pending_bale_request,
 )
 
 
@@ -136,7 +137,15 @@ async def btn_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def btn_bale_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _guard_banned(update):
         return
-    set_state(str(update.effective_chat.id), STATE_BALE_ID)
+    uid = str(update.effective_chat.id)
+    pending = await get_user_pending_bale_request(uid)
+    if pending:
+        await update.message.reply_text(
+            msg("bale_sub_pending_wait"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+    set_state(uid, STATE_BALE_ID)
     await update.message.reply_text(
         msg("bale_sub_ask_id"),
         parse_mode="HTML",

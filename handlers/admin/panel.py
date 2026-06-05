@@ -45,6 +45,10 @@ from core.database import (
     fulfill_bale_request,
     count_pending_bale_requests,
     get_pending_bale_requests,
+    get_approved_history_by_bale_id,
+    get_approved_history_by_user_id,
+    has_prior_bale_approval,
+    build_bale_admin_history_text,
     create_plan,
     delete_plan,
     update_plan,
@@ -65,6 +69,33 @@ def _admin_key() -> str:
 
 def is_admin(update: Update) -> bool:
     return is_admin_chat(update.effective_chat.id)
+
+
+async def _begin_bale_sub_send(query, request_id: int, req) -> None:
+    set_state(_admin_key(), STATE_ADMIN_BALE_SUB, request_id=request_id)
+    code = req["public_id"] or f"BALE-{request_id:08d}"
+    bale_history = await get_approved_history_by_bale_id(
+        req["bale_id"], exclude_request_id=request_id
+    )
+    user_history = await get_approved_history_by_user_id(
+        req["user_id"], exclude_request_id=request_id
+    )
+    history_text = build_bale_admin_history_text(
+        bale_history,
+        user_history,
+        current_bale_id=req["bale_id"],
+        current_user_id=req["user_id"],
+    )
+    await query.edit_message_text(
+        f"📤 <b>ارسال ساب — اشتراک بله</b>\n\n"
+        f"کد: <code>{code}</code>\n"
+        f"کاربر: <code>{req['user_id']}</code>\n"
+        f"شناسه بله: <code>{req['bale_id']}</code>\n\n"
+        f"{history_text}\n\n"
+        f"⏳ <b>لینک Subscription را در پیام بعدی بفرستید.</b>",
+        parse_mode="HTML",
+        reply_markup=None,
+    )
 
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -254,20 +285,69 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not req or req["status"] != "pending":
             await query.answer("درخواست یافت نشد یا قبلاً بررسی شده", show_alert=True)
             return
-        set_state(
-            _admin_key(),
-            STATE_ADMIN_BALE_SUB,
-            request_id=request_id,
+        bale_history = await get_approved_history_by_bale_id(
+            req["bale_id"], exclude_request_id=request_id
         )
-        code = req["public_id"] or f"BALE-{request_id:08d}"
+        user_history = await get_approved_history_by_user_id(
+            req["user_id"], exclude_request_id=request_id
+        )
+        if has_prior_bale_approval(bale_history, user_history, request_id):
+            code = req["public_id"] or f"BALE-{request_id:08d}"
+            history_text = build_bale_admin_history_text(
+                bale_history,
+                user_history,
+                current_bale_id=req["bale_id"],
+                current_user_id=req["user_id"],
+            )
+            await query.edit_message_text(
+                f"⚠️ <b>ارسال مجدد ساب؟</b>\n\n"
+                f"کد: <code>{code}</code>\n"
+                f"کاربر: <code>{req['user_id']}</code>\n"
+                f"شناسه بله: <code>{req['bale_id']}</code>\n\n"
+                f"{history_text}\n\n"
+                f"آیا مطمئن هستید می‌خواهید دوباره ساب ارسال کنید؟",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "✅ بله، ارسال مجدد",
+                                callback_data=f"adm_bale_resend_ok_{request_id}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "❌ خیر، لغو",
+                                callback_data=f"adm_bale_resend_no_{request_id}",
+                            )
+                        ],
+                    ]
+                ),
+            )
+            return
+        await _begin_bale_sub_send(query, request_id, req)
+        return
+
+    if data.startswith("adm_bale_resend_ok_"):
+        request_id = int(data.replace("adm_bale_resend_ok_", ""))
+        req = await get_bale_request(request_id)
+        if not req or req["status"] != "pending":
+            await query.answer("درخواست یافت نشد یا قبلاً بررسی شده", show_alert=True)
+            return
+        await _begin_bale_sub_send(query, request_id, req)
+        return
+
+    if data.startswith("adm_bale_resend_no_"):
+        request_id = int(data.replace("adm_bale_resend_no_", ""))
+        req = await get_bale_request(request_id)
+        code = (req["public_id"] if req else None) or f"BALE-{request_id:08d}"
         await query.edit_message_text(
-            f"📤 <b>ارسال ساب — اشتراک بله</b>\n\n"
-            f"کد: <code>{code}</code>\n"
-            f"کاربر: <code>{req['user_id']}</code>\n"
-            f"شناسه بله: <code>{req['bale_id']}</code>\n\n"
-            f"⏳ <b>لینک Subscription را در پیام بعدی بفرستید.</b>",
+            f"❌ ارسال ساب برای <code>{code}</code> لغو شد.\n"
+            f"از /admin → 🔗 اشتراک بله می‌توانید دوباره اقدام کنید.",
             parse_mode="HTML",
-            reply_markup=None,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 پنل", callback_data="adm_back")]]
+            ),
         )
         return
 
