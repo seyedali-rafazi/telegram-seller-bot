@@ -11,8 +11,11 @@ from core.constants import (
     BTN_MY_ORDERS,
     BTN_WALLET,
     BTN_SUPPORT,
+    BTN_BALE_SUB,
+    BTN_TEST,
     BTN_BACK,
     STATE_WALLET_AMOUNT,
+    STATE_BALE_ID,
     CARD_NUMBER,
     CARD_HOLDER,
 )
@@ -31,6 +34,8 @@ from core.database import (
     get_active_subscriptions,
     get_user_pending_orders,
     get_setting,
+    get_user_test_config,
+    save_user_test_config,
 )
 
 
@@ -128,6 +133,83 @@ async def btn_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def btn_bale_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await _guard_banned(update):
+        return
+    set_state(str(update.effective_chat.id), STATE_BALE_ID)
+    await update.message.reply_text(
+        msg("bale_sub_ask_id"),
+        parse_mode="HTML",
+        reply_markup=get_back_keyboard(),
+    )
+
+
+async def btn_test_config(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await _guard_banned(update):
+        return
+
+    uid = str(update.effective_chat.id)
+    existing = await get_user_test_config(uid)
+    if existing:
+        sub_url = existing[0]
+        await update.message.reply_text(
+            msg("test_config_already_used", sub_url=sub_url),
+            parse_mode="HTML",
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+
+    from services.xui_panel import create_test_client, is_xui_configured, XuiPanelError
+
+    if not is_xui_configured():
+        await update.message.reply_text(
+            msg("test_config_not_configured"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+
+    wait_msg = await update.message.reply_text("⏳ در حال ساخت کانفیگ تست…")
+
+    try:
+        result = await create_test_client(uid)
+    except XuiPanelError:
+        await wait_msg.delete()
+        await update.message.reply_text(
+            msg("test_config_error"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "test config creation failed for %s", uid
+        )
+        await wait_msg.delete()
+        await update.message.reply_text(
+            msg("test_config_error"),
+            reply_markup=get_main_menu_keyboard(),
+        )
+        return
+
+    await save_user_test_config(
+        uid,
+        result["sub_url"],
+        result["client_email"],
+        result["sub_id"],
+    )
+    await wait_msg.delete()
+    await update.message.reply_text(
+        msg(
+            "test_config_success",
+            sub_url=result["sub_url"],
+            traffic_mb=result["traffic_mb"],
+        ),
+        parse_mode="HTML",
+        reply_markup=get_main_menu_keyboard(),
+    )
+
+
 async def btn_back(update: Update, context: ContextTypes.DEFAULT_TYPE):
     clear_state(str(update.effective_chat.id))
     await update.message.reply_text(
@@ -150,5 +232,9 @@ async def route_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await btn_wallet(update, context)
     elif text == BTN_SUPPORT:
         await btn_support(update, context)
+    elif text == BTN_BALE_SUB:
+        await btn_bale_subscription(update, context)
+    elif text == BTN_TEST:
+        await btn_test_config(update, context)
     elif text == BTN_BACK:
         await btn_back(update, context)

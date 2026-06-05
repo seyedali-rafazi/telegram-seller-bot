@@ -12,6 +12,8 @@ from core.constants import (
     BTN_MY_ORDERS,
     BTN_WALLET,
     BTN_SUPPORT,
+    BTN_BALE_SUB,
+    BTN_TEST,
     BTN_BACK,
     SUPPORT_URL,
 )
@@ -22,6 +24,7 @@ def get_main_menu_keyboard():
     keyboard = [
         [KeyboardButton(BTN_BUY), KeyboardButton(BTN_ACCOUNT)],
         [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_WALLET)],
+        [KeyboardButton(BTN_BALE_SUB), KeyboardButton(BTN_TEST)],
         [KeyboardButton(BTN_SUPPORT)],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)

@@ -101,6 +101,16 @@ async def init_vpn_tables():
         ON purchase_orders(status)
     """)
 
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS test_configs (
+            user_id TEXT PRIMARY KEY,
+            sub_url TEXT NOT NULL,
+            client_email TEXT,
+            sub_id TEXT,
+            created_at TEXT
+        )
+    """)
+
     async with conn.execute("PRAGMA table_info(user_subscriptions)") as cursor:
         sub_columns = [column[1] for column in await cursor.fetchall()]
     if "config_text" not in sub_columns:

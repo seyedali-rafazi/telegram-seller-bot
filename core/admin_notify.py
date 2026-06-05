@@ -16,6 +16,7 @@ async def notify_admins(
     reply_markup: InlineKeyboardMarkup | None = None,
     photo_file_id: str | None = None,
     caption: str | None = None,
+    parse_mode: str | None = None,
 ) -> int:
     """ارسال پیام به همه ادمین‌ها. تعداد موفق را برمی‌گرداند."""
     admin_ids = get_admin_ids()
@@ -35,12 +36,14 @@ async def notify_admins(
                     photo=photo_file_id,
                     caption=caption or text,
                     reply_markup=reply_markup,
+                    parse_mode=parse_mode,
                 )
             else:
                 await context.bot.send_message(
                     chat_id=int(admin_id),
                     text=text,
                     reply_markup=reply_markup,
+                    parse_mode=parse_mode,
                 )
             sent += 1
         except Exception:
