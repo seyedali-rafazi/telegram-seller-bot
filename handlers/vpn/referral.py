@@ -4,14 +4,16 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from core.messages import msg
-from core.formatting import msg_e, format_sub_delivery
-from core.keyboards import get_main_menu_keyboard
+from core.formatting import msg_e
+from core.admin_notify import notify_admins
 from core.constants import REFERRAL_REWARD_MB, REFERRAL_CLAIM_MB
 from core.database import (
     get_referral_stats,
     format_mb_display,
-    claim_referral_internet,
+    create_referral_reward_request,
+    get_user_pending_referral_request,
 )
+from handlers.admin.user_panel import build_user_summary_text
 
 
 def referral_menu_keyboard() -> InlineKeyboardMarkup:
@@ -92,7 +94,18 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "ref_claim":
-        ok, reason, sub_url = await claim_referral_internet(uid)
+        pending = await get_user_pending_referral_request(uid)
+        if pending:
+            await query.edit_message_text(
+                msg("referral_claim_pending"),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 بازگشت", callback_data="ref_back")]]
+                ),
+            )
+            return
+
+        ok, reason, extra = await create_referral_reward_request(uid)
         stats = await get_referral_stats(uid)
         if not ok:
             if reason == "insufficient":
@@ -100,11 +113,15 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "referral_claim_insufficient",
                     claim_mb=REFERRAL_CLAIM_MB,
                     reward_mb=REFERRAL_REWARD_MB,
-                    available_display=format_mb_display(stats["available_mb"]),
+                    available_display=format_mb_display(
+                        extra.get("available_mb", stats["available_mb"])
+                        if extra
+                        else stats["available_mb"]
+                    ),
                     invite_count=stats["invite_count"],
                 )
-            elif reason == "empty_pool":
-                text = msg("referral_claim_empty_pool")
+            elif reason == "pending_exists":
+                text = msg("referral_claim_pending")
             else:
                 text = "❌ خطا. /start را بزنید."
             await query.edit_message_text(
@@ -116,15 +133,44 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        stats = await get_referral_stats(uid)
-        text = msg(
-            "referral_claim_ok",
-            claim_mb=REFERRAL_CLAIM_MB,
-            remaining_display=format_mb_display(stats["available_mb"]),
-            sub_body=format_sub_delivery(sub_url),
+        request_id = extra["id"]
+        request_code = extra["public_id"]
+        mb_display = extra["mb_display"]
+        summary = await build_user_summary_text(uid)
+        admin_text = (
+            f"🎁 <b>درخواست اینترنت رایگان (دعوت)</b>\n\n"
+            f"کد: <code>{request_code}</code>\n"
+            f"حجم: <b>{mb_display}</b>\n\n"
+            f"{summary}"
         )
+        kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "📤 ارسال ساب",
+                        callback_data=f"adm_refreq_send_{request_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "❌ رد درخواست",
+                        callback_data=f"adm_refreq_reject_{request_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "👤 پروفایل",
+                        callback_data=f"adm_uhome_{uid}",
+                    ),
+                ],
+            ]
+        )
+        await notify_admins(context, text=admin_text, reply_markup=kb, parse_mode="HTML")
+
         await query.edit_message_text(
-            text,
+            msg(
+                "referral_claim_submitted",
+                request_code=request_code,
+                mb_display=mb_display,
+            ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 بازگشت", callback_data="ref_back")]]

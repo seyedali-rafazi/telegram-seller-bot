@@ -81,12 +81,12 @@ from .referrals import (
     REFERRAL_REWARD_MB,
     REFERRAL_CLAIM_MB,
 )
-from .referral_configs import (
-    claim_referral_internet,
-    get_user_referral_config,
-    add_referral_configs_bulk,
-    count_available_referral_configs,
-    count_total_referral_configs,
-    list_referral_config_pool,
-    delete_referral_pool_item,
+from .referral_requests import (
+    create_referral_reward_request,
+    get_user_pending_referral_request,
+    get_referral_request,
+    fulfill_referral_request,
+    reject_referral_request,
+    count_pending_referral_requests,
+    get_pending_referral_requests,
 )

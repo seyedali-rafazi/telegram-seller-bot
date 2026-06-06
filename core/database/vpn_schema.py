@@ -179,6 +179,27 @@ async def init_vpn_tables():
     """)
 
     await conn.execute("""
+        CREATE TABLE IF NOT EXISTS referral_reward_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_id TEXT,
+            user_id TEXT NOT NULL,
+            mb_amount INTEGER NOT NULL,
+            sub_url TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_referral_reward_requests_status
+        ON referral_reward_requests(status)
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_referral_reward_requests_user_status
+        ON referral_reward_requests(user_id, status)
+    """)
+
+    await conn.execute("""
         CREATE TABLE IF NOT EXISTS referral_config_pool (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sub_url TEXT NOT NULL,
@@ -238,6 +259,7 @@ async def init_vpn_tables():
     )
 
     from core.ids import payment_public_id, order_public_id, subscription_public_id
+    from .referral_requests import referral_request_public_id
 
     async def _add_public_id(table: str, maker):
         async with conn.execute(f"PRAGMA table_info({table})") as cursor:
@@ -260,5 +282,6 @@ async def init_vpn_tables():
     await _add_public_id("payment_requests", payment_public_id)
     await _add_public_id("purchase_orders", order_public_id)
     await _add_public_id("user_subscriptions", subscription_public_id)
+    await _add_public_id("referral_reward_requests", referral_request_public_id)
 
     await conn.commit()

@@ -71,14 +71,12 @@ def get_admin_menu_keyboard():
             ],
             [
                 InlineKeyboardButton("🔗 اشتراک بله", callback_data="adm_bale_requests"),
+                InlineKeyboardButton("🎁 دعوت", callback_data="adm_referral_requests"),
             ],
             [InlineKeyboardButton("📦 مدیریت پلن‌ها", callback_data="adm_plans")],
             [
                 InlineKeyboardButton("🔗 ساب پولی", callback_data="adm_configs"),
                 InlineKeyboardButton("🧪 ساب تست", callback_data="adm_test_configs"),
-            ],
-            [
-                InlineKeyboardButton("🎁 ساب دعوت", callback_data="adm_referral_configs"),
             ],
             [InlineKeyboardButton("📢 پیام همگانی", callback_data="adm_broadcast")],
             [InlineKeyboardButton("📊 آمار", callback_data="adm_stats")],
