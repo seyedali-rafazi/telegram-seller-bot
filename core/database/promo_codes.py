@@ -55,6 +55,11 @@ async def resolve_invite_code(code: str) -> str | None:
 async def validate_promo_code_for_purchase(
     buyer_id: str, code: str
 ) -> tuple[bool, str, str | None]:
+    if not await can_enter_promo_code(buyer_id):
+        if not await is_first_purchase_eligible(buyer_id):
+            return False, "not_first_buy", None
+        return False, "code_already_used", None
+
     normalized = (code or "").strip().upper()
     if not normalized:
         return False, "empty", None
@@ -65,6 +70,54 @@ async def validate_promo_code_for_purchase(
     if owner_id == buyer_id:
         return False, "self", None
     return True, "ok", owner_id
+
+
+async def is_first_purchase_eligible(user_id: str) -> bool:
+    """True if user has never completed an approved paid plan purchase."""
+    conn = await get_db()
+    async with conn.execute(
+        """
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE user_id = ? AND status = 'approved'
+        """,
+        (user_id,),
+    ) as cursor:
+        return (await cursor.fetchone())[0] == 0
+
+
+async def buyer_has_active_promo_code_order(user_id: str) -> bool:
+    """True if buyer already attached a code on a pending/approved order."""
+    conn = await get_db()
+    async with conn.execute(
+        """
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE user_id = ?
+          AND invite_code_used IS NOT NULL
+          AND status IN ('pending', 'approved')
+        """,
+        (user_id,),
+    ) as cursor:
+        return (await cursor.fetchone())[0] > 0
+
+
+async def can_enter_promo_code(user_id: str) -> bool:
+    """Show promo UI only on first buy, before a code was used on a live order."""
+    if not await is_first_purchase_eligible(user_id):
+        return False
+    return not await buyer_has_active_promo_code_order(user_id)
+
+
+async def buyer_already_rewarded_promo(buyer_id: str) -> bool:
+    """True if this buyer already triggered a promo reward on a fulfilled order."""
+    conn = await get_db()
+    async with conn.execute(
+        """
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE user_id = ? AND promo_reward_given = 1
+        """,
+        (buyer_id,),
+    ) as cursor:
+        return (await cursor.fetchone())[0] > 0
 
 
 async def get_promo_code_stats(user_id: str) -> dict:
@@ -82,7 +135,7 @@ async def get_promo_code_stats(user_id: str) -> dict:
 
     async with conn.execute(
         """
-        SELECT COUNT(*) FROM purchase_orders
+        SELECT COUNT(DISTINCT user_id) FROM purchase_orders
         WHERE code_owner_id = ? AND promo_reward_given = 1
         """,
         (user_id,),
@@ -114,6 +167,27 @@ async def apply_promo_reward_for_order(order_id: int) -> dict | None:
     buyer_id = order["user_id"]
     if owner_id == buyer_id:
         return None
+
+    async with conn.execute(
+        """
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE user_id = ? AND status = 'approved' AND id != ?
+        """,
+        (buyer_id, order_id),
+    ) as cursor:
+        prior_approved = (await cursor.fetchone())[0]
+    if prior_approved > 0:
+        return None
+
+    async with conn.execute(
+        """
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE user_id = ? AND promo_reward_given = 1 AND id != ?
+        """,
+        (buyer_id, order_id),
+    ) as cursor:
+        if (await cursor.fetchone())[0] > 0:
+            return None
 
     now = get_tehran_now_full()
     await conn.execute(

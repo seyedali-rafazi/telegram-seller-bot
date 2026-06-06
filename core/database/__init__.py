@@ -98,6 +98,8 @@ from .promo_codes import (
     validate_promo_code_for_purchase,
     get_promo_code_stats,
     apply_promo_reward_for_order,
+    is_first_purchase_eligible,
+    can_enter_promo_code,
     PROMO_CODE_REWARD_MB,
     PROMO_CODE_CLAIM_MB,
 )

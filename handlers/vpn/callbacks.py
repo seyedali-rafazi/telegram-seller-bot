@@ -13,6 +13,7 @@ from core.database import (
     get_plan,
     get_wallet_balance,
     create_purchase_order,
+    can_enter_promo_code,
 )
 from core.database.users import get_user_info
 
@@ -46,9 +47,10 @@ async def plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     balance = await get_wallet_balance(uid)
     state = get_state(uid)
     promo_code = state.get("promo_code") if state.get("plan_id") == plan_id else None
+    show_promo = await can_enter_promo_code(uid)
     await query.edit_message_text(
         _confirm_text(name, price, balance, promo_code),
-        reply_markup=get_confirm_purchase_keyboard(plan_id),
+        reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=show_promo),
     )
 
 
@@ -94,6 +96,9 @@ async def buy_promo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     uid = str(query.message.chat_id)
+    if not await can_enter_promo_code(uid):
+        await query.answer("کد دعوت فقط برای اولین خرید است.", show_alert=True)
+        return
     plan_id = int(query.data.replace("buy_promo_", ""))
     set_state(uid, STATE_PURCHASE_PROMO_CODE, plan_id=plan_id)
     await query.edit_message_text(

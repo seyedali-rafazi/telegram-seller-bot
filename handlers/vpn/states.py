@@ -28,6 +28,7 @@ from core.database import (
     validate_promo_code_for_purchase,
     get_plan,
     get_wallet_balance,
+    can_enter_promo_code,
 )
 from handlers.vpn.user_menu import btn_back
 
@@ -231,12 +232,13 @@ async def process_purchase_promo_state(
 
     _, name, _, _, price, _ = plan
     balance = await get_wallet_balance(uid)
+    show_promo = await can_enter_promo_code(uid)
 
     if text.lower() in ("/skip", "skip", "رد"):
         clear_state(uid)
         await update.message.reply_text(
             _confirm_text(name, price, balance),
-            reply_markup=get_confirm_purchase_keyboard(plan_id),
+            reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=show_promo),
         )
         return True
 
@@ -249,6 +251,18 @@ async def process_purchase_promo_state(
     if not ok:
         if reason == "self":
             await update.message.reply_text(msg("promo_code_self"))
+        elif reason == "not_first_buy":
+            clear_state(uid)
+            await update.message.reply_text(
+                msg("promo_code_not_first_buy"),
+                reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=False),
+            )
+        elif reason == "code_already_used":
+            clear_state(uid)
+            await update.message.reply_text(
+                msg("promo_code_already_used"),
+                reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=False),
+            )
         else:
             await update.message.reply_text(msg("promo_code_invalid"))
         return True
@@ -267,6 +281,6 @@ async def process_purchase_promo_state(
     )
     await update.message.reply_text(
         _confirm_text(name, price, balance, code),
-        reply_markup=get_confirm_purchase_keyboard(plan_id),
+        reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=show_promo),
     )
     return True

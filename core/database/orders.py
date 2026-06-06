@@ -39,6 +39,13 @@ async def create_purchase_order(
     if pending_n >= MAX_PENDING_ORDERS_PER_USER:
         return False, "too_many_pending", {"count": pending_n}
 
+    if invite_code or code_owner_id:
+        from .promo_codes import can_enter_promo_code
+
+        if not await can_enter_promo_code(user_id):
+            invite_code = None
+            code_owner_id = None
+
     if not await deduct_wallet(user_id, price):
         return False, "insufficient_balance", {"price": price, "balance": balance}
 

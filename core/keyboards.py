@@ -44,18 +44,20 @@ def get_plans_keyboard(plans):
     return InlineKeyboardMarkup(rows)
 
 
-def get_confirm_purchase_keyboard(plan_id: int):
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("✅ تأیید", callback_data=f"buy_confirm_{plan_id}")],
+def get_confirm_purchase_keyboard(plan_id: int, *, show_promo: bool = True):
+    rows = [
+        [InlineKeyboardButton("✅ تأیید", callback_data=f"buy_confirm_{plan_id}")],
+    ]
+    if show_promo:
+        rows.append(
             [
                 InlineKeyboardButton(
-                    "🎫 کد دعوت", callback_data=f"buy_promo_{plan_id}"
+                    "🎫 کد دعوت (اولین خرید)", callback_data=f"buy_promo_{plan_id}"
                 )
-            ],
-            [InlineKeyboardButton("❌ انصراف", callback_data="buy_cancel")],
-        ]
-    )
+            ]
+        )
+    rows.append([InlineKeyboardButton("❌ انصراف", callback_data="buy_cancel")])
+    return InlineKeyboardMarkup(rows)
 
 
 def get_support_keyboard():
