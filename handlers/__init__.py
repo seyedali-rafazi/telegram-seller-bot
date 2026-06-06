@@ -10,7 +10,7 @@ from telegram.ext import (
 from .commands import cmd_start, cmd_myid, cmd_help
 from .vpn.user_menu import route_menu_button
 from .vpn.callbacks import user_callback_router
-from .vpn.states import process_wallet_state, process_bale_sub_state
+from .vpn.states import process_wallet_state, process_bale_sub_state, process_purchase_promo_state
 from .admin.panel import cmd_admin, admin_callback, process_admin_state
 from .admin.user_panel import cmd_user
 from .vpn.user_orders_ui import user_orders_callback
@@ -27,7 +27,7 @@ def register_all_handlers(application):
     application.add_handler(
         CallbackQueryHandler(
             user_callback_router,
-            pattern=r"^(plan_|buy_confirm_|buy_cancel)",
+            pattern=r"^(plan_|buy_confirm_|buy_cancel|buy_promo_)",
         )
     )
     application.add_handler(
@@ -69,6 +69,8 @@ async def _text_router(update, context):
     if await process_wallet_state(update, context):
         return
     if await process_bale_sub_state(update, context):
+        return
+    if await process_purchase_promo_state(update, context):
         return
     await route_menu_button(update, context)
 

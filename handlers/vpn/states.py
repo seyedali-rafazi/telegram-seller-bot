@@ -10,13 +10,14 @@ from core.constants import (
     STATE_WALLET_AMOUNT,
     STATE_WALLET_RECEIPT,
     STATE_BALE_ID,
+    STATE_PURCHASE_PROMO_CODE,
     BTN_BACK,
     CARD_NUMBER,
     CARD_HOLDER,
 )
 from core.formatting import msg_e
 from core.database import get_setting
-from core.keyboards import get_main_menu_keyboard, get_back_keyboard
+from core.keyboards import get_main_menu_keyboard, get_back_keyboard, get_confirm_purchase_keyboard
 from core.database import (
     create_payment_request,
     create_bale_request,
@@ -24,8 +25,23 @@ from core.database import (
     get_approved_history_by_bale_id,
     get_approved_history_by_user_id,
     build_bale_admin_history_text,
+    validate_promo_code_for_purchase,
+    get_plan,
+    get_wallet_balance,
 )
 from handlers.vpn.user_menu import btn_back
+
+
+def _confirm_text(name, price, balance, promo_code=None):
+    if promo_code:
+        return msg(
+            "confirm_buy_with_code",
+            name=name,
+            price=price,
+            balance=balance,
+            promo_code=promo_code,
+        )
+    return msg("confirm_buy", name=name, price=price, balance=balance)
 
 
 async def process_wallet_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -194,4 +210,63 @@ async def process_bale_sub_state(
         ]
     )
     await notify_admins(context, text=admin_text, reply_markup=kb, parse_mode="HTML")
+    return True
+
+
+async def process_purchase_promo_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    uid = str(update.effective_chat.id)
+    state = get_state(uid)
+    if state.get("step") != STATE_PURCHASE_PROMO_CODE:
+        return False
+
+    text = (update.message.text or "").strip()
+    plan_id = state.get("plan_id")
+    plan = await get_plan(plan_id)
+    if not plan or plan[5] != 1:
+        clear_state(uid)
+        await update.message.reply_text(msg("no_plans"))
+        return True
+
+    _, name, _, _, price, _ = plan
+    balance = await get_wallet_balance(uid)
+
+    if text.lower() in ("/skip", "skip", "رد"):
+        clear_state(uid)
+        await update.message.reply_text(
+            _confirm_text(name, price, balance),
+            reply_markup=get_confirm_purchase_keyboard(plan_id),
+        )
+        return True
+
+    if text == BTN_BACK:
+        clear_state(uid)
+        await btn_back(update, context)
+        return True
+
+    ok, reason, owner_id = await validate_promo_code_for_purchase(uid, text)
+    if not ok:
+        if reason == "self":
+            await update.message.reply_text(msg("promo_code_self"))
+        else:
+            await update.message.reply_text(msg("promo_code_invalid"))
+        return True
+
+    code = text.strip().upper()
+    from core.state_manager import user_states
+
+    user_states[uid] = {
+        "plan_id": plan_id,
+        "promo_code": code,
+        "code_owner_id": owner_id,
+    }
+    await update.message.reply_text(
+        msg("promo_code_applied", code=code),
+        parse_mode="HTML",
+    )
+    await update.message.reply_text(
+        _confirm_text(name, price, balance, code),
+        reply_markup=get_confirm_purchase_keyboard(plan_id),
+    )
     return True

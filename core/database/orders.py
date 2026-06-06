@@ -21,7 +21,10 @@ async def count_user_pending_orders(user_id: str) -> int:
 
 
 async def create_purchase_order(
-    user_id: str, plan_id: int
+    user_id: str,
+    plan_id: int,
+    invite_code: str | None = None,
+    code_owner_id: str | None = None,
 ) -> tuple[bool, str, dict | None]:
     plan = await get_plan(plan_id)
     if not plan or plan[5] != 1:
@@ -44,10 +47,20 @@ async def create_purchase_order(
     try:
         cursor = await conn.execute(
             """
-            INSERT INTO purchase_orders (user_id, plan_id, amount, status, created_at)
-            VALUES (?, ?, ?, 'pending', ?)
+            INSERT INTO purchase_orders (
+                user_id, plan_id, amount, status, created_at,
+                invite_code_used, code_owner_id
+            )
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
             """,
-            (user_id, plan_id, price, now),
+            (
+                user_id,
+                plan_id,
+                price,
+                now,
+                (invite_code or "").strip().upper() or None,
+                code_owner_id,
+            ),
         )
         order_id = cursor.lastrowid
         pub = order_public_id(order_id)
@@ -176,6 +189,10 @@ async def fulfill_purchase_order(
     )
     await conn.commit()
 
+    from .promo_codes import apply_promo_reward_for_order
+
+    promo_reward = await apply_promo_reward_for_order(order_id)
+
     return True, "ok", {
         "user_id": user_id,
         "name": name,
@@ -184,4 +201,5 @@ async def fulfill_purchase_order(
         "subscription_id": sub_id,
         "subscription_public_id": sub_pub,
         "order_public_id": order_code,
+        "promo_reward": promo_reward,
     }

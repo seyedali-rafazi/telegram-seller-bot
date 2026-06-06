@@ -111,8 +111,10 @@ async def _begin_referral_sub_send(query, request_id: int, req) -> None:
     set_state(_admin_key(), STATE_ADMIN_REFERRAL_SUB, request_id=request_id)
     code = req["public_id"] or f"REF-{request_id:08d}"
     mb_display = format_mb_display(req["mb_amount"])
+    source = req["source"] if req["source"] else "link"
+    kind = "لینک دعوت" if source == "link" else "کد دعوت"
     await query.edit_message_text(
-        f"📤 <b>ارسال ساب — دعوت</b>\n\n"
+        f"📤 <b>ارسال ساب — {kind}</b>\n\n"
         f"کد: <code>{code}</code>\n"
         f"کاربر: <code>{req['user_id']}</code>\n"
         f"حجم: <b>{mb_display}</b>\n\n"
@@ -490,10 +492,18 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["🎁 **درخواست‌های اینترنت رایگان (دعوت):**\n"]
         kb = []
         for r in rows:
-            rid, code, uid, mb_amount, created = r[0], r[1], r[2], r[3], r[4]
+            rid, code, uid, mb_amount, source, created = (
+                r[0],
+                r[1],
+                r[2],
+                r[3],
+                r[4],
+                r[5],
+            )
             mb_display = format_mb_display(mb_amount)
+            kind = "🔗 لینک" if source == "link" else "🎫 کد"
             lines.append(
-                f"• `{code}` — {mb_display} — کاربر `{uid}` — {created[:10]}"
+                f"• `{code}` — {kind} — {mb_display} — `{uid}` — {created[:10]}"
             )
             kb.append(
                 [
@@ -870,6 +880,26 @@ async def process_admin_state(
             )
         except Exception:
             pass
+
+        promo = extra.get("promo_reward")
+        if promo:
+            try:
+                await context.bot.send_message(
+                    chat_id=int(promo["owner_id"]),
+                    text=msg(
+                        "promo_code_owner_notify",
+                        order_code=promo["order_code"],
+                        reward_mb=promo["reward_mb"],
+                        available_display=promo["available_display"],
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            await update.message.reply_text(
+                f"🎫 پاداش {promo['reward_mb']} مگ به صاحب کد {promo['owner_id']} داده شد."
+            )
+
         await update.message.reply_text(
             f"✅ سفارش {extra['order_public_id']} تکمیل شد.\n"
             f"ساب برای کاربر {user_id} ارسال شد."

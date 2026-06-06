@@ -30,6 +30,16 @@ async def init_vpn_tables():
         await conn.execute(
             "ALTER TABLE users ADD COLUMN referral_claimed_mb INTEGER DEFAULT 0"
         )
+    if "invite_code" not in columns:
+        await conn.execute("ALTER TABLE users ADD COLUMN invite_code TEXT")
+    if "promo_code_earned_mb" not in columns:
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN promo_code_earned_mb INTEGER DEFAULT 0"
+        )
+    if "promo_code_claimed_mb" not in columns:
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN promo_code_claimed_mb INTEGER DEFAULT 0"
+        )
 
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS vpn_plans (
@@ -184,6 +194,7 @@ async def init_vpn_tables():
             public_id TEXT,
             user_id TEXT NOT NULL,
             mb_amount INTEGER NOT NULL,
+            source TEXT DEFAULT 'link',
             sub_url TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             created_at TEXT NOT NULL,
@@ -235,6 +246,45 @@ async def init_vpn_tables():
         await conn.execute(
             "ALTER TABLE user_subscriptions ADD COLUMN config_text TEXT"
         )
+
+    async with conn.execute("PRAGMA table_info(purchase_orders)") as cursor:
+        order_cols = [column[1] for column in await cursor.fetchall()]
+    if order_cols and "invite_code_used" not in order_cols:
+        await conn.execute(
+            "ALTER TABLE purchase_orders ADD COLUMN invite_code_used TEXT"
+        )
+    if order_cols and "code_owner_id" not in order_cols:
+        await conn.execute(
+            "ALTER TABLE purchase_orders ADD COLUMN code_owner_id TEXT"
+        )
+    if order_cols and "promo_reward_given" not in order_cols:
+        await conn.execute(
+            "ALTER TABLE purchase_orders ADD COLUMN promo_reward_given INTEGER DEFAULT 0"
+        )
+
+    async with conn.execute("PRAGMA table_info(referral_reward_requests)") as cursor:
+        ref_req_cols = [column[1] for column in await cursor.fetchall()]
+    if ref_req_cols and "source" not in ref_req_cols:
+        await conn.execute(
+            "ALTER TABLE referral_reward_requests ADD COLUMN source TEXT DEFAULT 'link'"
+        )
+
+    await conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code "
+        "ON users(invite_code) WHERE invite_code IS NOT NULL"
+    )
+
+    from .promo_codes import make_invite_code
+
+    async with conn.execute(
+        "SELECT user_id FROM users WHERE invite_code IS NULL OR invite_code = ''"
+    ) as cursor:
+        for (uid,) in await cursor.fetchall():
+            code = make_invite_code(uid)
+            await conn.execute(
+                "UPDATE users SET invite_code = ? WHERE user_id = ?",
+                (code, uid),
+            )
 
     now = get_tehran_now_full()
     async with conn.execute("SELECT COUNT(*) FROM vpn_plans") as cursor:

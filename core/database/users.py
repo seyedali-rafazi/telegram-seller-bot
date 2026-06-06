@@ -25,6 +25,9 @@ async def add_user(user_id, username):
         (username, user_id),
     )
     await conn.commit()
+    from .promo_codes import ensure_invite_code
+
+    await ensure_invite_code(user_id)
 
 
 async def is_user_banned(user_id: str) -> bool:

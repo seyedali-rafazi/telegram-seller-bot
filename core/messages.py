@@ -64,31 +64,34 @@ MESSAGES = {
         "<b>سرویس‌های فعال:</b>\n{services}"
     ),
     "referral_section": (
+        "<b>از لینک دعوت:</b>\n"
         "👥 دعوت موفق: <b>{invite_count}</b> نفر\n"
-        "📊 جمع دریافتی: <b>{earned_display}</b>\n"
-        "✅ استفاده‌شده: <b>{claimed_display}</b>\n"
-        "💾 موجود برای دریافت: <b>{available_display}</b>"
+        "💾 موجود: <b>{link_available}</b> از <b>{link_earned}</b>\n\n"
+        "<b>از کد دعوت خرید:</b>\n"
+        "🎫 خرید با کد شما: <b>{code_use_count}</b> بار\n"
+        "💾 موجود: <b>{code_available}</b> از <b>{code_earned}</b>\n"
+        "🔑 کد اختصاصی: <code>{invite_code}</code>"
     ),
     "referral_menu": (
         "🎁 <b>دعوت دوستان</b>\n\n"
-        "با لینک اختصاصی خود دوستان را دعوت کنید.\n"
-        "هر دوست که ربات و کانال را با لینک شما بپیوندد، "
-        "<b>{reward_mb} مگابایت</b> اینترنت رایگان می‌گیرید.\n\n"
-        "برای دریافت ساب، حداقل <b>{claim_mb} مگابایت</b> لازم است.\n"
-        "با «دریافت اینترنت رایگان» کل موجودی شما یک‌جا برای ادمین ارسال می‌شود "
-        "و پس از تأیید، لینک Subscription برایتان فرستاده می‌شود.\n\n"
+        "<b>لینک دعوت:</b> هر عضو جدید با لینک شما → "
+        "<b>{reward_mb} مگابایت</b> (حداقل {claim_mb} مگ برای درخواست)\n\n"
+        "<b>کد دعوت:</b> هر خرید موفق با کد شما → "
+        "<b>{promo_reward_mb} مگابایت</b> (۵ گیگ)\n"
+        "کد شما: <code>{invite_code}</code>\n\n"
+        "با دکمه‌های زیر موجودی را یک‌جا برای ادمین ارسال کنید.\n\n"
         "{stats_block}"
     ),
     "referral_stats_block": (
-        "👥 دعوت موفق: <b>{invite_count}</b>\n"
-        "💾 موجود: <b>{available_display}</b> از <b>{earned_display}</b>"
+        "🔗 لینک — موجود: <b>{link_available}</b> | "
+        "🎫 کد — موجود: <b>{code_available}</b>"
     ),
     "referral_link": (
-        "🔗 <b>لینک دعوت شما</b>\n\n"
-        "این لینک را برای دوستان بفرستید:\n"
-        "<code>{link}</code>\n\n"
-        "⚠️ هر کاربر فقط یک‌بار محاسبه می‌شود؛ "
-        "اگر دوست خارج و دوباره عضو شود، پاداش تکراری نمی‌گیرید."
+        "🔗 <b>لینک و کد دعوت شما</b>\n\n"
+        "<b>لینک:</b>\n<code>{link}</code>\n\n"
+        "<b>کد (هنگام خرید پلن):</b>\n<code>{invite_code}</code>\n\n"
+        "⚠️ لینک: هر کاربر فقط یک‌بار محاسبه می‌شود.\n"
+        "⚠️ کد: پس از تأیید سفارش توسط ادمین، {promo_reward_mb} مگ به شما اضافه می‌شود."
     ),
     "referral_claim_submitted": (
         "✅ درخواست اینترنت رایگان ثبت شد.\n\n"
@@ -111,16 +114,43 @@ MESSAGES = {
         "مقدار <b>{mb_display}</b> به موجودی دعوت شما برگشت."
     ),
     "referral_claim_insufficient": (
-        "❌ موجودی دعوت کافی نیست.\n\n"
-        "برای درخواست حداقل <b>{claim_mb} مگابایت</b> لازم است "
-        "(۲ دعوت موفق = {reward_mb}+{reward_mb} مگ).\n\n"
-        "موجودی شما: <b>{available_display}</b>\n"
+        "❌ موجودی {source_label} کافی نیست.\n\n"
+        "حداقل لازم: <b>{claim_mb} مگابایت</b>\n"
+        "موجودی شما: <b>{available_display}</b>"
+    ),
+    "referral_claim_insufficient_link": (
+        "❌ موجودی لینک دعوت کافی نیست.\n\n"
+        "حداقل <b>{claim_mb} مگابایت</b> لازم است "
+        "(۲ دعوت = {reward_mb}+{reward_mb} مگ).\n\n"
+        "موجودی: <b>{available_display}</b>\n"
         "دعوت موفق: <b>{invite_count}</b> نفر"
     ),
     "referral_inviter_notify": (
         "🎉 یک دوست با لینک شما عضو شد!\n\n"
-        "➕ <b>{reward_mb} مگابایت</b> به موجودی دعوت شما اضافه شد.\n"
-        "💾 موجودی کل: <b>{available_display}</b>"
+        "➕ <b>{reward_mb} مگابایت</b> به موجودی لینک اضافه شد.\n"
+        "💾 موجودی لینک: <b>{available_display}</b>"
+    ),
+    "promo_code_owner_notify": (
+        "🎉 یک کاربر با کد شما پلن خرید!\n\n"
+        "سفارش: <code>{order_code}</code>\n"
+        "➕ <b>{reward_mb} مگابایت</b> (۵ گیگ) به موجودی کد اضافه شد.\n"
+        "💾 موجودی کد: <b>{available_display}</b>"
+    ),
+    "promo_code_ask": (
+        "🎫 <b>کد دعوت (اختیاری)</b>\n\n"
+        "اگر کد دوست خود را دارید، در پیام بعدی ارسال کنید.\n"
+        "برای رد کردن: {skip_hint}"
+    ),
+    "promo_code_invalid": "❌ کد نامعتبر است. دوباره تلاش کنید یا بدون کد ادامه دهید.",
+    "promo_code_self": "❌ نمی‌توانید کد خودتان را وارد کنید.",
+    "promo_code_applied": "✅ کد <code>{code}</code> ثبت شد.",
+    "confirm_buy_with_code": (
+        "🛒 تأیید خرید\n\n"
+        "پلن: {name}\n"
+        "قیمت: {price:,} تومان\n"
+        "موجودی کیف پول: {balance:,} تومان\n"
+        "🎫 کد دعوت: <code>{promo_code}</code>\n\n"
+        "آیا خرید را تأیید می‌کنید؟"
     ),
     "no_active_service": "— هیچ سرویس فعالی ندارید —",
     "no_pending_orders": "— سفارش در انتظاری ندارید —",

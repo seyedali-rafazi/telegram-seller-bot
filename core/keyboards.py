@@ -47,10 +47,13 @@ def get_plans_keyboard(plans):
 def get_confirm_purchase_keyboard(plan_id: int):
     return InlineKeyboardMarkup(
         [
+            [InlineKeyboardButton("✅ تأیید", callback_data=f"buy_confirm_{plan_id}")],
             [
-                InlineKeyboardButton("✅ تأیید", callback_data=f"buy_confirm_{plan_id}"),
-                InlineKeyboardButton("❌ انصراف", callback_data="buy_cancel"),
-            ]
+                InlineKeyboardButton(
+                    "🎫 کد دعوت", callback_data=f"buy_promo_{plan_id}"
+                )
+            ],
+            [InlineKeyboardButton("❌ انصراف", callback_data="buy_cancel")],
         ]
     )
 

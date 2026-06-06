@@ -20,11 +20,14 @@ BTN_BACK = "🔙 بازگشت"
 
 REFERRAL_REWARD_MB = 500
 REFERRAL_CLAIM_MB = 1000
+PROMO_CODE_REWARD_MB = 5000
+PROMO_CODE_CLAIM_MB = 5000
 
 # State steps
 STATE_WALLET_AMOUNT = "wallet_amount"
 STATE_WALLET_RECEIPT = "wallet_receipt"
 STATE_BALE_ID = "bale_id"
+STATE_PURCHASE_PROMO_CODE = "purchase_promo_code"
 STATE_ADMIN_BROADCAST = "admin_broadcast"
 STATE_ADMIN_CONFIGS = "admin_configs"
 STATE_ADMIN_TEST_CONFIGS = "admin_test_configs"
