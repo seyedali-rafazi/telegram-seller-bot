@@ -23,7 +23,10 @@ from core.messages import msg
 
 def get_main_menu_keyboard():
     keyboard = [
-        [KeyboardButton(BTN_BUY), KeyboardButton(BTN_ACCOUNT)],
+        [
+            KeyboardButton(BTN_BUY, style="success"),
+            KeyboardButton(BTN_ACCOUNT, style="primary"),
+        ],
         [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_WALLET)],
         [KeyboardButton(BTN_BALE_SUB), KeyboardButton(BTN_TEST)],
         [KeyboardButton(BTN_REFERRAL), KeyboardButton(BTN_SUPPORT)],

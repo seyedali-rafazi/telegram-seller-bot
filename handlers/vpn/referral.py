@@ -121,9 +121,7 @@ async def _submit_claim(
     link_stats = await get_referral_stats(uid)
     code_stats = await get_promo_code_stats(uid)
     stats = link_stats if source == SOURCE_LINK else code_stats
-    source_label = extra["source_label"] if extra else (
-        "لینک دعوت" if source == SOURCE_LINK else "کد دعوت"
-    )
+    source_label = "لینک دعوت" if source == SOURCE_LINK else "کد دعوت"
     min_mb = REFERRAL_CLAIM_MB if source == SOURCE_LINK else PROMO_CODE_CLAIM_MB
 
     if not ok:
