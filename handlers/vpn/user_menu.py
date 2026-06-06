@@ -9,13 +9,11 @@ from core.constants import (
     BTN_BUY,
     BTN_ACCOUNT,
     BTN_MY_ORDERS,
-    BTN_WALLET,
     BTN_SUPPORT,
     BTN_BALE_SUB,
     BTN_TEST,
     BTN_REFERRAL,
     BTN_BACK,
-    STATE_WALLET_AMOUNT,
     STATE_BALE_ID,
 )
 from core.keyboards import (
@@ -28,7 +26,6 @@ from core.state_manager import clear_state, set_state
 from core.database import (
     is_user_banned,
     get_active_plans,
-    get_wallet_balance,
     get_user_info,
     get_active_subscriptions,
     get_user_pending_orders,
@@ -73,7 +70,6 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     username, _, join_date, _ = info
     username_str = f"@{username}" if username else "—"
-    balance = await get_wallet_balance(uid)
     pending = await get_user_pending_orders(uid)
     subs = await get_active_subscriptions(uid)
 
@@ -98,7 +94,6 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "account_body",
         uid=h(uid),
         username=h(username_str),
-        balance=balance,
         join_date=h(join_date or "—"),
         referral_section=referral_section,
         pending_orders=pending_orders,
@@ -106,18 +101,6 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(
         text, parse_mode="HTML", reply_markup=get_main_menu_keyboard()
-    )
-
-
-async def btn_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if await _guard_banned(update):
-        return
-
-    set_state(str(update.effective_chat.id), STATE_WALLET_AMOUNT)
-    await update.message.reply_text(
-        msg("wallet_intro"),
-        parse_mode="HTML",
-        reply_markup=get_back_keyboard(),
     )
 
 
@@ -200,8 +183,6 @@ async def route_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from .user_orders_ui import btn_orders_hub
 
         await btn_orders_hub(update, context)
-    elif text == BTN_WALLET:
-        await btn_wallet(update, context)
     elif text == BTN_SUPPORT:
         await btn_support(update, context)
     elif text == BTN_BALE_SUB:

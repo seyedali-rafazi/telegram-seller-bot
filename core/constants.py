@@ -11,7 +11,6 @@ CARD_HOLDER = os.getenv("CARD_HOLDER", "VPN Bot")
 BTN_BUY = "🛒 خرید پلن"
 BTN_ACCOUNT = "👤 حساب من"
 BTN_MY_ORDERS = "📋 سفارش‌ها و ساب"
-BTN_WALLET = "💳 شارژ کیف پول"
 BTN_SUPPORT = "📖 راهنما و پشتیبانی"
 BTN_BALE_SUB = "🔗 اشتراک بله"
 BTN_TEST = "🧪 تست"
@@ -24,8 +23,7 @@ PROMO_CODE_REWARD_MB = 5000
 PROMO_CODE_CLAIM_MB = 5000
 
 # State steps
-STATE_WALLET_AMOUNT = "wallet_amount"
-STATE_WALLET_RECEIPT = "wallet_receipt"
+STATE_PURCHASE_RECEIPT = "purchase_receipt"
 STATE_BALE_ID = "bale_id"
 STATE_PURCHASE_PROMO_CODE = "purchase_promo_code"
 STATE_ADMIN_BROADCAST = "admin_broadcast"

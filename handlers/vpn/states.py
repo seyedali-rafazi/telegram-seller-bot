@@ -1,25 +1,18 @@
 # handlers/vpn/states.py
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.messages import msg
-from core.admin_notify import notify_admins
 from core.state_manager import get_state, set_state, clear_state
 from core.constants import (
-    STATE_WALLET_AMOUNT,
-    STATE_WALLET_RECEIPT,
     STATE_BALE_ID,
     STATE_PURCHASE_PROMO_CODE,
+    STATE_PURCHASE_RECEIPT,
     BTN_BACK,
-    CARD_NUMBER,
-    CARD_HOLDER,
 )
-from core.formatting import msg_e
-from core.database import get_setting
-from core.keyboards import get_main_menu_keyboard, get_back_keyboard, get_confirm_purchase_keyboard
+from core.keyboards import get_main_menu_keyboard, get_confirm_purchase_keyboard
 from core.database import (
-    create_payment_request,
     create_bale_request,
     get_user_pending_bale_request,
     get_approved_history_by_bale_id,
@@ -27,29 +20,18 @@ from core.database import (
     build_bale_admin_history_text,
     validate_promo_code_for_purchase,
     get_plan,
-    get_wallet_balance,
     can_enter_promo_code,
 )
 from handlers.vpn.user_menu import btn_back
+from handlers.vpn.callbacks import _confirm_text, submit_order_with_receipt
 
 
-def _confirm_text(name, price, balance, promo_code=None):
-    if promo_code:
-        return msg(
-            "confirm_buy_with_code",
-            name=name,
-            price=price,
-            balance=balance,
-            promo_code=promo_code,
-        )
-    return msg("confirm_buy", name=name, price=price, balance=balance)
-
-
-async def process_wallet_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+async def process_purchase_receipt_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
     uid = str(update.effective_chat.id)
     state = get_state(uid)
-    step = state.get("step")
-    if not step:
+    if state.get("step") != STATE_PURCHASE_RECEIPT:
         return False
 
     if update.message.text == BTN_BACK:
@@ -57,86 +39,13 @@ async def process_wallet_state(update: Update, context: ContextTypes.DEFAULT_TYP
         await btn_back(update, context)
         return True
 
-    if step == STATE_WALLET_AMOUNT:
-        text = (update.message.text or "").strip().replace(",", "")
-        if not text.isdigit() or int(text) <= 0:
-            await update.message.reply_text(msg("invalid_amount"))
-            return True
-        amount = int(text)
-        card = CARD_NUMBER or await get_setting("card_number", "")
-        card_name = CARD_HOLDER or await get_setting("card_holder", "VPN")
-        if not card:
-            clear_state(uid)
-            await update.message.reply_text(
-                msg("card_not_set"),
-                reply_markup=get_main_menu_keyboard(),
-            )
-            return True
-        set_state(uid, STATE_WALLET_RECEIPT, amount=amount)
-        await update.message.reply_text(
-            msg_e(
-                "wallet_pay_instructions",
-                amount=amount,
-                card=card,
-                card_name=card_name,
-            ),
-            parse_mode="HTML",
-            reply_markup=get_back_keyboard(),
-        )
+    photo = update.message.photo
+    if not photo:
+        await update.message.reply_text(msg("upload_receipt"))
         return True
 
-    if step == STATE_WALLET_RECEIPT:
-        photo = update.message.photo
-        if not photo:
-            await update.message.reply_text(msg("upload_receipt"))
-            return True
-
-        amount = state.get("amount", 0)
-        file_id = photo[-1].file_id
-        payment = await create_payment_request(uid, amount, file_id)
-        payment_id = payment["id"]
-        payment_code = payment["public_id"]
-        clear_state(uid)
-
-        await update.message.reply_text(
-            msg("receipt_submitted", payment_code=payment_code, amount=amount),
-            parse_mode="HTML",
-            reply_markup=get_main_menu_keyboard(),
-        )
-
-        from core.database.users import get_user_info
-
-        info = await get_user_info(uid)
-        uname = info[0] if info else "—"
-        caption = (
-            f"💳 درخواست شارژ\n\n"
-            f"کد: {payment_code}\n"
-            f"شناسه دیتابیس: {payment_id}\n\n"
-            f"کاربر: {uid} (@{uname})\n"
-            f"مبلغ: {amount:,} تومان"
-        )
-        kb = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "✅ تأیید", callback_data=f"pay_ok_{payment_id}"
-                    ),
-                    InlineKeyboardButton(
-                        "❌ رد", callback_data=f"pay_no_{payment_id}"
-                    ),
-                ]
-            ]
-        )
-        await notify_admins(
-            context,
-            text=caption,
-            photo_file_id=file_id,
-            caption=caption,
-            reply_markup=kb,
-        )
-        return True
-
-    return False
+    file_id = photo[-1].file_id
+    return await submit_order_with_receipt(update, context, uid, file_id)
 
 
 async def process_bale_sub_state(
@@ -186,6 +95,8 @@ async def process_bale_sub_state(
     )
 
     from handlers.admin.user_panel import build_user_summary_text
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from core.admin_notify import notify_admins
 
     summary = await build_user_summary_text(uid)
     admin_text = (
@@ -231,13 +142,12 @@ async def process_purchase_promo_state(
         return True
 
     _, name, _, _, price, _ = plan
-    balance = await get_wallet_balance(uid)
     show_promo = await can_enter_promo_code(uid)
 
     if text.lower() in ("/skip", "skip", "رد"):
         clear_state(uid)
         await update.message.reply_text(
-            _confirm_text(name, price, balance),
+            _confirm_text(name, price),
             reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=show_promo),
         )
         return True
@@ -280,7 +190,7 @@ async def process_purchase_promo_state(
         parse_mode="HTML",
     )
     await update.message.reply_text(
-        _confirm_text(name, price, balance, code),
+        _confirm_text(name, price, code),
         reply_markup=get_confirm_purchase_keyboard(plan_id, show_promo=show_promo),
     )
     return True

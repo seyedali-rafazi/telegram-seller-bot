@@ -76,6 +76,24 @@ def _admin_key() -> str:
     return get_primary_admin_id()
 
 
+async def _append_admin_message(query, suffix: str, *, parse_mode=None, reply_markup=None):
+    msg_obj = query.message
+    base = msg_obj.caption or msg_obj.text or ""
+    new_text = base + suffix
+    if msg_obj.photo:
+        await query.edit_message_caption(
+            caption=new_text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+    else:
+        await query.edit_message_text(
+            text=new_text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+
+
 def is_admin(update: Update) -> bool:
     return is_admin_chat(update.effective_chat.id)
 
@@ -127,7 +145,6 @@ async def _begin_referral_sub_send(query, request_id: int, req) -> None:
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return
-    pending_pay = await count_pending_payments()
     pending_ord = await count_pending_orders()
     avail = await count_available_configs()
     test_avail = await count_available_test_configs()
@@ -135,7 +152,6 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bale_pending = await count_pending_bale_requests()
     await update.message.reply_text(
         f"🛠 **پنل ادمین**\n\n"
-        f"پرداخت‌های در انتظار: {pending_pay}\n"
         f"سفارش‌های در انتظار: {pending_ord}\n"
         f"درخواست بله: {bale_pending}\n"
         f"درخواست دعوت: {ref_pending}\n"
@@ -210,7 +226,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "adm_stats":
         total = await get_total_users()
-        pending_pay = await count_pending_payments()
         pending_ord = await count_pending_orders()
         avail = await count_available_configs()
         total_cfg = await count_total_configs()
@@ -221,7 +236,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"📊 آمار\n\n"
             f"کاربران: {total}\n"
-            f"پرداخت معلق: {pending_pay}\n"
             f"سفارش معلق: {pending_ord}\n"
             f"درخواست بله: {bale_pending}\n"
             f"درخواست دعوت: {ref_pending}\n"
@@ -603,11 +617,10 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "adm_back":
         clear_state(_admin_key())
-        pending_pay = await count_pending_payments()
         pending_ord = await count_pending_orders()
         avail = await count_available_configs()
         await query.edit_message_text(
-            f"🛠 پنل ادمین\nپرداخت: {pending_pay} | سفارش: {pending_ord} | کانفیگ: {avail}",
+            f"🛠 پنل ادمین\nسفارش: {pending_ord} | کانفیگ: {avail}",
             reply_markup=get_admin_menu_keyboard(),
         )
         return
@@ -620,12 +633,11 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         set_state(_admin_key(), STATE_ADMIN_ORDER_CONFIG, order_id=order_id)
         order_code = order["public_id"] or f"ORD-{order_id:08d}"
-        base = query.message.text or query.message.caption or ""
         from core.formatting import h
 
-        await query.edit_message_text(
-            (query.message.text or query.message.caption or "")
-            + f"\n\n⏳ لینک Subscription برای <code>{h(order_code)}</code> را در <b>پیام بعدی</b> ارسال کنید.",
+        await _append_admin_message(
+            query,
+            f"\n\n⏳ لینک Subscription برای <code>{h(order_code)}</code> را در <b>پیام بعدی</b> ارسال کنید.",
             parse_mode="HTML",
             reply_markup=None,
         )
@@ -636,9 +648,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         order = await get_order(order_id)
         ok = await reject_purchase_order(order_id)
         if ok and order:
-            base = query.message.text or ""
-            await query.edit_message_text(
-                base + "\n\n❌ سفارش رد شد.",
+            await _append_admin_message(
+                query,
+                "\n\n❌ سفارش رد شد.",
                 reply_markup=None,
             )
             order_code = order["public_id"] or f"ORD-{order_id:08d}"
@@ -648,7 +660,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text=msg(
                         "order_rejected_user",
                         order_code=order_code,
-                        refund=int(order["amount"]),
                     ),
                     parse_mode="HTML",
                 )

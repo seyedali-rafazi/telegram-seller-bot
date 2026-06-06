@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from .connection import get_db
 from .utils import get_tehran_now_full
 from .plans import get_plan
-from .wallet import get_wallet_balance, deduct_wallet, adjust_wallet
 from core.ids import order_public_id, subscription_public_id
 
 MAX_PENDING_ORDERS_PER_USER = 5
@@ -23,6 +22,7 @@ async def count_user_pending_orders(user_id: str) -> int:
 async def create_purchase_order(
     user_id: str,
     plan_id: int,
+    receipt_file_id: str,
     invite_code: str | None = None,
     code_owner_id: str | None = None,
 ) -> tuple[bool, str, dict | None]:
@@ -31,9 +31,6 @@ async def create_purchase_order(
         return False, "plan_not_found", None
 
     _, name, duration_days, data_gb, price, _ = plan
-    balance = await get_wallet_balance(user_id)
-    if balance < price:
-        return False, "insufficient_balance", {"price": price, "balance": balance}
 
     pending_n = await count_user_pending_orders(user_id)
     if pending_n >= MAX_PENDING_ORDERS_PER_USER:
@@ -46,41 +43,34 @@ async def create_purchase_order(
             invite_code = None
             code_owner_id = None
 
-    if not await deduct_wallet(user_id, price):
-        return False, "insufficient_balance", {"price": price, "balance": balance}
-
     now = get_tehran_now_full()
     conn = await get_db()
-    try:
-        cursor = await conn.execute(
-            """
-            INSERT INTO purchase_orders (
-                user_id, plan_id, amount, status, created_at,
-                invite_code_used, code_owner_id
-            )
-            VALUES (?, ?, ?, 'pending', ?, ?, ?)
-            """,
-            (
-                user_id,
-                plan_id,
-                price,
-                now,
-                (invite_code or "").strip().upper() or None,
-                code_owner_id,
-            ),
+    cursor = await conn.execute(
+        """
+        INSERT INTO purchase_orders (
+            user_id, plan_id, amount, status, created_at,
+            invite_code_used, code_owner_id, receipt_file_id
         )
-        order_id = cursor.lastrowid
-        pub = order_public_id(order_id)
-        await conn.execute(
-            "UPDATE purchase_orders SET public_id = ? WHERE id = ?",
-            (pub, order_id),
-        )
-        await conn.commit()
-    except Exception:
-        await adjust_wallet(user_id, price)
-        raise
+        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            plan_id,
+            price,
+            now,
+            (invite_code or "").strip().upper() or None,
+            code_owner_id,
+            receipt_file_id,
+        ),
+    )
+    order_id = cursor.lastrowid
+    pub = order_public_id(order_id)
+    await conn.execute(
+        "UPDATE purchase_orders SET public_id = ? WHERE id = ?",
+        (pub, order_id),
+    )
+    await conn.commit()
 
-    new_balance = await get_wallet_balance(user_id)
     return True, "pending", {
         "order_id": order_id,
         "public_id": pub,
@@ -88,7 +78,6 @@ async def create_purchase_order(
         "price": price,
         "duration_days": duration_days,
         "data_gb": data_gb,
-        "new_balance": new_balance,
     }
 
 
@@ -129,8 +118,6 @@ async def reject_purchase_order(order_id: int, admin_note: str = "") -> bool:
     if not order or order["status"] != "pending":
         return False
     now = get_tehran_now_full()
-    amount = int(order["amount"])
-    user_id = order["user_id"]
     await conn.execute(
         """
         UPDATE purchase_orders
@@ -140,7 +127,6 @@ async def reject_purchase_order(order_id: int, admin_note: str = "") -> bool:
         (admin_note, now, order_id),
     )
     await conn.commit()
-    await adjust_wallet(user_id, amount)
     return True
 
 

@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from core.messages import msg
 from core.formatting import msg_e, h, format_sub_delivery
 from core.keyboards import get_main_menu_keyboard
-from core.database import get_wallet_balance, get_user_info, get_bale_request
+from core.database import get_user_info, get_bale_request
 from handlers.vpn.referral import build_referral_section
 from core.database.user_orders import (
     get_user_pending_orders_detailed,
@@ -94,7 +94,6 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text("❌ /start را بزنید.")
             return
         username, _, join_date, _ = info
-        balance = await get_wallet_balance(uid)
         pending = await get_user_pending_orders_detailed(uid)
         pending_txt = (
             "\n".join(
@@ -117,7 +116,6 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "account_body",
             uid=h(uid),
             username=h(f"@{username}" if username else "—"),
-            balance=balance,
             join_date=h(join_date or "—"),
             referral_section=referral_section,
             pending_orders=pending_txt,

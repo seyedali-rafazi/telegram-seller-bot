@@ -10,7 +10,6 @@ from core.constants import (
     BTN_BUY,
     BTN_ACCOUNT,
     BTN_MY_ORDERS,
-    BTN_WALLET,
     BTN_SUPPORT,
     BTN_BALE_SUB,
     BTN_TEST,
@@ -27,9 +26,9 @@ def get_main_menu_keyboard():
             KeyboardButton(BTN_BUY, style="success"),
             KeyboardButton(BTN_ACCOUNT, style="primary"),
         ],
-        [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_WALLET)],
-        [KeyboardButton(BTN_BALE_SUB), KeyboardButton(BTN_TEST)],
-        [KeyboardButton(BTN_REFERRAL), KeyboardButton(BTN_SUPPORT)],
+        [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_BALE_SUB)],
+        [KeyboardButton(BTN_TEST), KeyboardButton(BTN_REFERRAL)],
+        [KeyboardButton(BTN_SUPPORT)],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -73,10 +72,7 @@ def get_admin_menu_keyboard():
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("👥 کاربران", callback_data="adm_users")],
-            [
-                InlineKeyboardButton("💳 تأیید پرداخت‌ها", callback_data="adm_payments"),
-                InlineKeyboardButton("🛒 سفارش‌ها", callback_data="adm_orders"),
-            ],
+            [InlineKeyboardButton("🛒 سفارش‌ها", callback_data="adm_orders")],
             [
                 InlineKeyboardButton("🔗 اشتراک بله", callback_data="adm_bale_requests"),
                 InlineKeyboardButton("🎁 دعوت", callback_data="adm_referral_requests"),

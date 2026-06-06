@@ -261,6 +261,10 @@ async def init_vpn_tables():
         await conn.execute(
             "ALTER TABLE purchase_orders ADD COLUMN promo_reward_given INTEGER DEFAULT 0"
         )
+    if order_cols and "receipt_file_id" not in order_cols:
+        await conn.execute(
+            "ALTER TABLE purchase_orders ADD COLUMN receipt_file_id TEXT"
+        )
 
     async with conn.execute("PRAGMA table_info(referral_reward_requests)") as cursor:
         ref_req_cols = [column[1] for column in await cursor.fetchall()]
