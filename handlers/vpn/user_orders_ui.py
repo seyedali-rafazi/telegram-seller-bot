@@ -7,6 +7,7 @@ from core.messages import msg
 from core.formatting import msg_e, h, format_sub_delivery
 from core.keyboards import get_main_menu_keyboard
 from core.database import get_wallet_balance, get_user_info, get_bale_request
+from handlers.vpn.referral import build_referral_section
 from core.database.user_orders import (
     get_user_pending_orders_detailed,
     get_user_orders_history,
@@ -111,12 +112,14 @@ async def user_orders_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             if subs_live
             else msg("no_active_service")
         )
+        referral_section = await build_referral_section(uid)
         text = msg("account_title") + "\n\n" + msg(
             "account_body",
             uid=h(uid),
             username=h(f"@{username}" if username else "—"),
             balance=balance,
             join_date=h(join_date or "—"),
+            referral_section=referral_section,
             pending_orders=pending_txt,
             services=svc_txt,
         )

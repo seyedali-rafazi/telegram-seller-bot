@@ -20,6 +20,7 @@ from core.constants import (
     STATE_ADMIN_USER_BALANCE,
     STATE_ADMIN_ORDER_CONFIG,
     STATE_ADMIN_BALE_SUB,
+    STATE_ADMIN_REFERRAL_CONFIGS,
 )
 from core.database import (
     get_total_users,
@@ -43,6 +44,11 @@ from core.database import (
     count_total_test_configs,
     list_test_config_pool,
     delete_test_pool_item,
+    add_referral_configs_bulk,
+    count_available_referral_configs,
+    count_total_referral_configs,
+    list_referral_config_pool,
+    delete_referral_pool_item,
     get_bale_request,
     fulfill_bale_request,
     count_pending_bale_requests,
@@ -107,6 +113,7 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pending_ord = await count_pending_orders()
     avail = await count_available_configs()
     test_avail = await count_available_test_configs()
+    ref_avail = await count_available_referral_configs()
     bale_pending = await count_pending_bale_requests()
     await update.message.reply_text(
         f"🛠 **پنل ادمین**\n\n"
@@ -114,7 +121,8 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"سفارش‌های در انتظار: {pending_ord}\n"
         f"درخواست بله: {bale_pending}\n"
         f"ساب پولی آزاد: {avail}\n"
-        f"ساب تست آزاد: {test_avail}\n\n"
+        f"ساب تست آزاد: {test_avail}\n"
+        f"ساب دعوت آزاد: {ref_avail}\n\n"
         "گزینه را انتخاب کنید.\n\nراهنما: /help",
         parse_mode="Markdown",
         reply_markup=get_admin_menu_keyboard(),
@@ -168,6 +176,52 @@ async def _show_test_pool_list(query) -> None:
     )
 
 
+async def _show_referral_pool_list(query) -> None:
+    rows = await list_referral_config_pool(25)
+    avail = await count_available_referral_configs()
+    total = await count_total_referral_configs()
+    kb = []
+    lines = [
+        f"🎁 **مدیریت ساب دعوت**",
+        f"آزاد: **{avail}** / کل: **{total}**",
+        "",
+        "روی 🗑 بزنید تا حذف شود.",
+        "",
+    ]
+    if not rows:
+        lines.append("لیست خالی است.")
+    else:
+        for r in rows:
+            pid, url, is_assigned, assigned_to, created = (
+                r[0],
+                r[1],
+                r[2],
+                r[3],
+                r[4],
+            )
+            preview = url if len(url) <= 48 else url[:45] + "…"
+            if is_assigned and assigned_to:
+                status = f"👤 `{assigned_to}`"
+            else:
+                status = "✅ آزاد"
+            date = (created or "")[:10] or "—"
+            lines.append(f"**#{pid}** — {status} — {date}\n`{preview}`")
+            kb.append(
+                [
+                    InlineKeyboardButton(
+                        f"🗑 حذف #{pid}",
+                        callback_data=f"adm_ref_del_{pid}",
+                    )
+                ]
+            )
+    kb.append([InlineKeyboardButton("🔙 ساب دعوت", callback_data="adm_referral_configs")])
+    await query.edit_message_text(
+        "\n".join(lines),
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(kb),
+    )
+
+
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not is_admin_chat(query.message.chat_id):
@@ -190,6 +244,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_cfg = await count_total_configs()
         test_avail = await count_available_test_configs()
         test_total = await count_total_test_configs()
+        ref_avail = await count_available_referral_configs()
+        ref_total = await count_total_referral_configs()
         bale_pending = await count_pending_bale_requests()
         await query.edit_message_text(
             f"📊 آمار\n\n"
@@ -198,7 +254,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"سفارش معلق: {pending_ord}\n"
             f"درخواست بله: {bale_pending}\n"
             f"ساب پولی: {avail} آزاد / {total_cfg} کل\n"
-            f"ساب تست: {test_avail} آزاد / {test_total} کل"
+            f"ساب تست: {test_avail} آزاد / {test_total} کل\n"
+            f"ساب دعوت: {ref_avail} آزاد / {ref_total} کل"
         )
         return
 
@@ -453,6 +510,59 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _show_test_pool_list(query)
         return
 
+    if data == "adm_referral_configs":
+        avail = await count_available_referral_configs()
+        total = await count_total_referral_configs()
+        await query.edit_message_text(
+            f"🎁 **ساب دعوت (۱ گیگ)**\n\n"
+            f"آزاد: **{avail}** / کل: **{total}**",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("➕ افزودن", callback_data="adm_ref_add")],
+                    [
+                        InlineKeyboardButton(
+                            "📋 مشاهده و حذف", callback_data="adm_ref_list"
+                        )
+                    ],
+                    [InlineKeyboardButton("🔙 پنل", callback_data="adm_back")],
+                ]
+            ),
+        )
+        return
+
+    if data == "adm_ref_add":
+        set_state(_admin_key(), STATE_ADMIN_REFERRAL_CONFIGS)
+        avail = await count_available_referral_configs()
+        total = await count_total_referral_configs()
+        await query.edit_message_text(
+            f"🎁 **افزودن ساب دعوت**\n\n"
+            f"آزاد: **{avail}** / کل: **{total}**\n\n"
+            "هر خط یک لینک Subscription (۱ گیگ روی پنل):\n"
+            "مثال:\n"
+            "`https://panel.example.com/sub/referral123`\n\n"
+            "متن یا فایل `.txt` بفرستید.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 ساب دعوت", callback_data="adm_referral_configs")]]
+            ),
+        )
+        return
+
+    if data == "adm_ref_list":
+        await _show_referral_pool_list(query)
+        return
+
+    if data.startswith("adm_ref_del_"):
+        pool_id = int(data.replace("adm_ref_del_", ""))
+        ok, reason = await delete_referral_pool_item(pool_id)
+        if not ok:
+            await query.answer("یافت نشد", show_alert=True)
+            return
+        await query.answer("✅ حذف شد")
+        await _show_referral_pool_list(query)
+        return
+
     if data == "adm_broadcast":
         set_state(_admin_key(), STATE_ADMIN_BROADCAST)
         await query.edit_message_text("📢 متن پیام همگانی را ارسال کنید:")
@@ -662,6 +772,26 @@ async def process_admin_state(
             f"✅ {added} کانفیگ تست اضافه شد.\n"
             f"آزاد: {avail} / کل: {total}\n\n"
             f"برای حذف: /admin → 🧪 ساب تست → 📋 مشاهده و حذف"
+        )
+        return True
+
+    if step == STATE_ADMIN_REFERRAL_CONFIGS:
+        clear_state(_admin_key())
+        if update.message.document:
+            doc = await update.message.document.get_file()
+            content = (await doc.download_as_bytearray()).decode(
+                "utf-8", errors="ignore"
+            )
+            lines = content.splitlines()
+        else:
+            lines = text.splitlines()
+        added = await add_referral_configs_bulk(lines)
+        avail = await count_available_referral_configs()
+        total = await count_total_referral_configs()
+        await update.message.reply_text(
+            f"✅ {added} ساب دعوت اضافه شد.\n"
+            f"آزاد: {avail} / کل: {total}\n\n"
+            f"برای حذف: /admin → 🎁 ساب دعوت → 📋 مشاهده و حذف"
         )
         return True
 

@@ -10,7 +10,7 @@ from core.state_manager import clear_state
 from core.keyboards import get_main_menu_keyboard
 from core.messages import msg
 from core.config import is_admin_chat, get_admin_ids
-from core.database import add_user, is_user_banned
+from core.database import add_user, is_user_banned, user_exists, record_referral, qualify_referral, format_mb_display
 
 load_dotenv()
 CHANNEL_ID = os.getenv("CHANNEL_ID")
@@ -82,7 +82,19 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
     username = update.effective_user.username if update.effective_user else None
 
+    referrer_id = None
+    if context.args:
+        arg = context.args[0]
+        if arg.startswith("ref_"):
+            raw = arg[4:]
+            if raw.isdigit() and raw != chat_id:
+                referrer_id = raw
+
+    is_new = not await user_exists(chat_id)
     await add_user(chat_id, username)
+
+    if referrer_id and is_new:
+        await record_referral(referrer_id, chat_id)
 
     if await is_user_banned(chat_id):
         await update.message.reply_text(msg("banned"))
@@ -98,6 +110,25 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
         return
+
+    rewarded = await qualify_referral(chat_id)
+    if rewarded:
+        inviter_id, reward_mb = rewarded
+        from core.database import get_referral_stats
+
+        stats = await get_referral_stats(inviter_id)
+        try:
+            await context.bot.send_message(
+                chat_id=int(inviter_id),
+                text=msg(
+                    "referral_inviter_notify",
+                    reward_mb=reward_mb,
+                    available_display=format_mb_display(stats["available_mb"]),
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
 
     clear_state(chat_id)
     await send_welcome(update, context)

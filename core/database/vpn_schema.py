@@ -22,6 +22,14 @@ async def init_vpn_tables():
         await conn.execute(
             "ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'fa'"
         )
+    if "referral_earned_mb" not in columns:
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN referral_earned_mb INTEGER DEFAULT 0"
+        )
+    if "referral_claimed_mb" not in columns:
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN referral_claimed_mb INTEGER DEFAULT 0"
+        )
 
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS vpn_plans (
@@ -148,6 +156,51 @@ async def init_vpn_tables():
     await conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_bale_sub_requests_bale_status
         ON bale_sub_requests(bale_id, status)
+    """)
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inviter_id TEXT NOT NULL,
+            invitee_id TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reward_mb INTEGER NOT NULL DEFAULT 500,
+            created_at TEXT NOT NULL,
+            rewarded_at TEXT
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_referrals_inviter
+        ON referrals(inviter_id)
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_referrals_invitee_status
+        ON referrals(invitee_id, status)
+    """)
+
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS referral_config_pool (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sub_url TEXT NOT NULL,
+            is_assigned INTEGER DEFAULT 0,
+            assigned_to TEXT,
+            assigned_at TEXT,
+            created_at TEXT
+        )
+    """)
+    await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_referral_config_pool_assigned
+        ON referral_config_pool(is_assigned)
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS referral_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            sub_url TEXT NOT NULL,
+            mb_spent INTEGER NOT NULL,
+            pool_id INTEGER,
+            created_at TEXT NOT NULL
+        )
     """)
 
     async with conn.execute("PRAGMA table_info(test_configs)") as cursor:

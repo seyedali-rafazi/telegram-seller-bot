@@ -13,6 +13,7 @@ from core.constants import (
     BTN_SUPPORT,
     BTN_BALE_SUB,
     BTN_TEST,
+    BTN_REFERRAL,
     BTN_BACK,
     STATE_WALLET_AMOUNT,
     STATE_BALE_ID,
@@ -35,6 +36,7 @@ from core.database import (
     assign_test_config_to_user,
     get_user_pending_bale_request,
 )
+from .referral import btn_referral, build_referral_section
 
 
 async def _guard_banned(update: Update) -> bool:
@@ -90,12 +92,15 @@ async def btn_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         services = msg("no_active_service")
 
+    referral_section = await build_referral_section(uid)
+
     text = msg("account_title") + "\n\n" + msg(
         "account_body",
         uid=h(uid),
         username=h(username_str),
         balance=balance,
         join_date=h(join_date or "—"),
+        referral_section=referral_section,
         pending_orders=pending_orders,
         services=services,
     )
@@ -203,5 +208,7 @@ async def route_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await btn_bale_subscription(update, context)
     elif text == BTN_TEST:
         await btn_test_config(update, context)
+    elif text == BTN_REFERRAL:
+        await btn_referral(update, context)
     elif text == BTN_BACK:
         await btn_back(update, context)

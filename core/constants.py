@@ -15,7 +15,11 @@ BTN_WALLET = "💳 شارژ کیف پول"
 BTN_SUPPORT = "📖 راهنما و پشتیبانی"
 BTN_BALE_SUB = "🔗 اشتراک بله"
 BTN_TEST = "🧪 تست"
+BTN_REFERRAL = "🎁 دعوت دوستان"
 BTN_BACK = "🔙 بازگشت"
+
+REFERRAL_REWARD_MB = 500
+REFERRAL_CLAIM_MB = 1000
 
 # State steps
 STATE_WALLET_AMOUNT = "wallet_amount"
@@ -31,3 +35,4 @@ STATE_ADMIN_PLAN_PRICE = "admin_plan_price"
 STATE_ADMIN_USER_BALANCE = "admin_user_balance"
 STATE_ADMIN_ORDER_CONFIG = "admin_order_config"
 STATE_ADMIN_BALE_SUB = "admin_bale_sub"
+STATE_ADMIN_REFERRAL_CONFIGS = "admin_referral_configs"

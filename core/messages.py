@@ -59,8 +59,57 @@ MESSAGES = {
         "👤 نام کاربری: {username}\n"
         "💰 موجودی کیف پول: <b>{balance:,}</b> تومان\n"
         "📅 عضویت از: {join_date}\n\n"
+        "<b>اینترنت رایگان از دعوت:</b>\n{referral_section}\n\n"
         "<b>سفارش‌های در انتظار:</b>\n{pending_orders}\n\n"
         "<b>سرویس‌های فعال:</b>\n{services}"
+    ),
+    "referral_section": (
+        "👥 دعوت موفق: <b>{invite_count}</b> نفر\n"
+        "📊 جمع دریافتی: <b>{earned_display}</b>\n"
+        "✅ استفاده‌شده: <b>{claimed_display}</b>\n"
+        "💾 موجود برای دریافت: <b>{available_display}</b>"
+    ),
+    "referral_menu": (
+        "🎁 <b>دعوت دوستان</b>\n\n"
+        "با لینک اختصاصی خود دوستان را دعوت کنید.\n"
+        "هر دوست که ربات و کانال را با لینک شما بپیوندد، "
+        "<b>{reward_mb} مگابایت</b> اینترنت رایگان می‌گیرید.\n\n"
+        "برای دریافت لینک ساب، حداقل <b>{claim_mb} مگابایت</b> "
+        "(معادل ۲ دعوت موفق) لازم است.\n\n"
+        "{stats_block}"
+    ),
+    "referral_stats_block": (
+        "👥 دعوت موفق: <b>{invite_count}</b>\n"
+        "💾 موجود: <b>{available_display}</b> از <b>{earned_display}</b>"
+    ),
+    "referral_link": (
+        "🔗 <b>لینک دعوت شما</b>\n\n"
+        "این لینک را برای دوستان بفرستید:\n"
+        "<code>{link}</code>\n\n"
+        "⚠️ هر کاربر فقط یک‌بار محاسبه می‌شود؛ "
+        "اگر دوست خارج و دوباره عضو شود، پاداش تکراری نمی‌گیرید."
+    ),
+    "referral_claim_ok": (
+        "✅ <b>اینترنت رایگان دعوت</b>\n\n"
+        "{claim_mb} مگابایت از موجودی شما استفاده شد.\n"
+        "موجودی باقی‌مانده: <b>{remaining_display}</b>\n\n"
+        "{sub_body}"
+    ),
+    "referral_claim_insufficient": (
+        "❌ موجودی دعوت کافی نیست.\n\n"
+        "برای دریافت ساب حداقل <b>{claim_mb} مگابایت</b> لازم است "
+        "(۲ دعوت موفق = {reward_mb}+{reward_mb} مگ).\n\n"
+        "موجودی شما: <b>{available_display}</b>\n"
+        "دعوت موفق: <b>{invite_count}</b> نفر"
+    ),
+    "referral_claim_empty_pool": (
+        "❌ در حال حاضر ساب دعوت موجود نیست.\n\n"
+        "موجودی شما کسر نشد. لطفاً بعداً دوباره تلاش کنید."
+    ),
+    "referral_inviter_notify": (
+        "🎉 یک دوست با لینک شما عضو شد!\n\n"
+        "➕ <b>{reward_mb} مگابایت</b> به موجودی دعوت شما اضافه شد.\n"
+        "💾 موجودی کل: <b>{available_display}</b>"
     ),
     "no_active_service": "— هیچ سرویس فعالی ندارید —",
     "no_pending_orders": "— سفارش در انتظاری ندارید —",

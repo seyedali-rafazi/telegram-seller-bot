@@ -14,6 +14,7 @@ from .vpn.states import process_wallet_state, process_bale_sub_state
 from .admin.panel import cmd_admin, admin_callback, process_admin_state
 from .admin.user_panel import cmd_user
 from .vpn.user_orders_ui import user_orders_callback
+from .vpn.referral import referral_callback
 
 
 def register_all_handlers(application):
@@ -27,6 +28,12 @@ def register_all_handlers(application):
         CallbackQueryHandler(
             user_callback_router,
             pattern=r"^(plan_|buy_confirm_|buy_cancel)",
+        )
+    )
+    application.add_handler(
+        CallbackQueryHandler(
+            referral_callback,
+            pattern=r"^ref_",
         )
     )
     application.add_handler(
