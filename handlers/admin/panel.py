@@ -18,6 +18,7 @@ from core.constants import (
     STATE_ADMIN_PLAN_GB,
     STATE_ADMIN_PLAN_PRICE,
     STATE_ADMIN_USER_BALANCE,
+    STATE_ADMIN_USER_MESSAGE,
     STATE_ADMIN_ORDER_CONFIG,
     STATE_ADMIN_BALE_SUB,
     STATE_ADMIN_REFERRAL_SUB,
@@ -52,6 +53,7 @@ from core.database import (
     format_mb_display,
     get_bale_request,
     fulfill_bale_request,
+    reject_bale_request,
     count_pending_bale_requests,
     get_pending_bale_requests,
     get_approved_history_by_bale_id,
@@ -357,6 +359,10 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         callback_data=f"adm_bale_send_{rid}",
                     ),
                     InlineKeyboardButton(
+                        "❌",
+                        callback_data=f"adm_bale_reject_{rid}",
+                    ),
+                    InlineKeyboardButton(
                         "👤",
                         callback_data=f"adm_uhome_{uid}",
                     ),
@@ -408,7 +414,13 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ],
                         [
                             InlineKeyboardButton(
-                                "❌ خیر، لغو",
+                                "❌ رد درخواست",
+                                callback_data=f"adm_bale_reject_{request_id}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "↩️ خیر، لغو",
                                 callback_data=f"adm_bale_resend_no_{request_id}",
                             )
                         ],
@@ -417,6 +429,36 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         await _begin_bale_sub_send(query, request_id, req)
+        return
+
+    if data.startswith("adm_bale_reject_"):
+        request_id = int(data.replace("adm_bale_reject_", ""))
+        ok, reason, extra = await reject_bale_request(request_id)
+        if not ok:
+            await query.answer("درخواست یافت نشد یا قبلاً بررسی شده", show_alert=True)
+            return
+        user_id = extra["user_id"]
+        try:
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=msg(
+                    "bale_sub_rejected_user",
+                    request_code=extra["public_id"],
+                    bale_id=extra["bale_id"],
+                ),
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        await query.edit_message_text(
+            f"❌ درخواست بله <code>{extra['public_id']}</code> رد شد.\n"
+            f"کاربر: <code>{user_id}</code>\n"
+            f"شناسه بله: <code>{extra['bale_id']}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 پنل", callback_data="adm_back")]]
+            ),
+        )
         return
 
     if data.startswith("adm_bale_resend_ok_"):
@@ -737,6 +779,25 @@ async def process_admin_state(
         return False
 
     text = (update.message.text or "").strip()
+
+    if step == STATE_ADMIN_USER_MESSAGE:
+        target = state.get("target_user")
+        clear_state(_admin_key())
+        if not target or not text:
+            await update.message.reply_text("❌ پیام خالی است یا کاربر مشخص نیست.")
+            return True
+        try:
+            await context.bot.send_message(chat_id=int(target), text=text)
+            await update.message.reply_text(
+                msg("admin_message_sent", user_id=target),
+                parse_mode="HTML",
+            )
+        except Exception:
+            await update.message.reply_text(
+                msg("admin_message_failed", user_id=target),
+                parse_mode="HTML",
+            )
+        return True
 
     if step == STATE_ADMIN_BROADCAST:
         clear_state(_admin_key())

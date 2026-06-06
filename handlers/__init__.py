@@ -7,7 +7,7 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from .commands import cmd_start, cmd_myid, cmd_help
+from .commands import cmd_start, cmd_myid, cmd_help, cmd_message
 from .vpn.user_menu import route_menu_button
 from .vpn.callbacks import user_callback_router
 from .vpn.states import process_purchase_receipt_state, process_bale_sub_state, process_purchase_promo_state
@@ -22,6 +22,7 @@ def register_all_handlers(application):
     application.add_handler(CommandHandler("admin", cmd_admin))
     application.add_handler(CommandHandler("myid", cmd_myid))
     application.add_handler(CommandHandler("help", cmd_help))
+    application.add_handler(CommandHandler("message", cmd_message))
     application.add_handler(CommandHandler("user", cmd_user))
 
     application.add_handler(

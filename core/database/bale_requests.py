@@ -276,3 +276,30 @@ async def fulfill_bale_request(
         "public_id": req["public_id"] or bale_request_public_id(request_id),
         "reviewed_at": now,
     }
+
+
+async def reject_bale_request(
+    request_id: int, admin_note: str = ""
+) -> tuple[bool, str, dict | None]:
+    req = await get_bale_request(request_id)
+    if not req:
+        return False, "not_found", None
+    if req["status"] != "pending":
+        return False, "already_reviewed", None
+
+    now = get_tehran_now_full()
+    conn = await get_db()
+    await conn.execute(
+        """
+        UPDATE bale_sub_requests
+        SET status = 'rejected', reviewed_at = ?
+        WHERE id = ?
+        """,
+        (now, request_id),
+    )
+    await conn.commit()
+    return True, "ok", {
+        "user_id": req["user_id"],
+        "bale_id": req["bale_id"],
+        "public_id": req["public_id"] or bale_request_public_id(request_id),
+    }

@@ -36,6 +36,7 @@ from .bale_requests import (
     create_bale_request,
     get_bale_request,
     fulfill_bale_request,
+    reject_bale_request,
     count_pending_bale_requests,
     get_pending_bale_requests,
     get_user_pending_bale_request,

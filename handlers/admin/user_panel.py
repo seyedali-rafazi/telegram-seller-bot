@@ -4,8 +4,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from core.config import is_admin_chat, get_primary_admin_id
-from core.state_manager import set_state
-from core.constants import STATE_ADMIN_ORDER_CONFIG
+from core.state_manager import set_state, clear_state
+from core.constants import STATE_ADMIN_ORDER_CONFIG, STATE_ADMIN_USER_MESSAGE
 from core.database import get_wallet_balance, get_order
 from core.database.users import get_user_info, is_user_banned
 from core.database.user_orders import (
@@ -82,9 +82,15 @@ def user_panel_keyboard(user_id: str, counts: dict) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    "💬 پیام به کاربر",
+                    callback_data=f"adm_umsg_{user_id}",
+                ),
+                InlineKeyboardButton(
                     "💰 تغییر موجودی",
                     callback_data=f"adm_wallet_{user_id}",
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     "🔙 پروفایل",
                     callback_data=f"adm_uhome_{user_id}",
@@ -159,12 +165,35 @@ async def admin_user_panel_callback(
         or data.startswith("adm_urej_")
         or data.startswith("adm_fulfill_")
         or data.startswith("adm_vord_")
+        or data.startswith("adm_umsg_")
     ):
         return False
 
     await query.answer()
 
+    if data.startswith("adm_umsg_"):
+        user_id = data.replace("adm_umsg_", "")
+        info = await get_user_info(user_id)
+        if not info:
+            await query.answer("کاربر یافت نشد", show_alert=True)
+            return True
+        set_state(_admin_key(), STATE_ADMIN_USER_MESSAGE, target_user=user_id)
+        username = info[0]
+        uname = f"@{username}" if username else "—"
+        await query.edit_message_text(
+            f"💬 <b>پیام به کاربر</b>\n\n"
+            f"🆔 <code>{h(user_id)}</code>\n"
+            f"👤 {h(uname)}\n\n"
+            f"⏳ متن پیام را در <b>پیام بعدی</b> ارسال کنید.",
+            parse_mode=PARSE,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ لغو", callback_data=f"adm_uhome_{user_id}")]]
+            ),
+        )
+        return True
+
     if data.startswith("adm_uhome_"):
+        clear_state(_admin_key())
         user_id = data.replace("adm_uhome_", "")
         await send_user_panel(update, user_id, edit_message=query)
         return True

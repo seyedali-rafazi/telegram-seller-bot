@@ -112,7 +112,11 @@ async def process_bale_sub_state(
                 InlineKeyboardButton(
                     "📤 ارسال ساب",
                     callback_data=f"adm_bale_send_{request_id}",
-                )
+                ),
+                InlineKeyboardButton(
+                    "❌ رد",
+                    callback_data=f"adm_bale_reject_{request_id}",
+                ),
             ],
             [
                 InlineKeyboardButton(

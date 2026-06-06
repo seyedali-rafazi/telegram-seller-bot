@@ -6,10 +6,11 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from dotenv import load_dotenv
 
-from core.state_manager import clear_state
+from core.state_manager import clear_state, set_state
 from core.keyboards import get_main_menu_keyboard
 from core.messages import msg
-from core.config import is_admin_chat, get_admin_ids
+from core.config import is_admin_chat, get_admin_ids, get_primary_admin_id
+from core.constants import STATE_ADMIN_USER_MESSAGE
 from core.database import add_user, is_user_banned, user_exists, record_referral, qualify_referral, format_mb_display
 
 load_dotenv()
@@ -22,6 +23,7 @@ ADMIN_HELP = """
 **دستورات:**
 • `/admin` — باز کردن پنل مدیریت (دکمه‌های اینلاین)
 • `/user 123456789` — پروفایل کاربر، سفارش‌های در انتظار، ارسال ساب
+• `/message 123456789` — ارسال پیام به یک کاربر (متن در پیام بعدی)
 • `/myid` — نمایش شناسه عددی تلگرام شما (برای قرار دادن در `.env`)
 • `/help` — همین راهنما
 
@@ -42,8 +44,13 @@ ADMIN_HELP = """
 ۵. **رد** → سفارش لغو می‌شود
 
 **اشتراک بله:**
-۱. کاربر شناسه بله می‌فرستد → پیام با دکمه **📤 ارسال ساب**
+۱. کاربر شناسه بله می‌فرستد → پیام با دکمه **📤 ارسال ساب** یا **❌ رد**
 ۲. لینک Subscription را در پیام بعدی بفرستید → برای کاربر ارسال می‌شود
+۳. درخواست نامعتبر → **❌ رد** → کاربر می‌تواند دوباره درخواست دهد
+
+**پیام به کاربر:**
+• `/user شناسه` → **💬 پیام به کاربر** → متن را در پیام بعدی بفرستید
+• یا `/message شناسه` (و در صورت نیاز متن در همان دستور)
 
 **تنظیم `.env`:**
 ```
@@ -151,3 +158,49 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     await update.message.reply_text(ADMIN_HELP.strip(), parse_mode="Markdown")
+
+
+async def cmd_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin_chat(update.effective_chat.id):
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "❌ فرمت:\n<code>/message 123456789</code>\n\n"
+            "سپس متن پیام را در پیام بعدی ارسال کنید.\n"
+            "یا: <code>/message 123456789 سلام، پیام شما</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    user_id = context.args[0].strip()
+    if not user_id.isdigit():
+        await update.message.reply_text("❌ شناسه کاربر باید عدد باشد.")
+        return
+
+    if not await user_exists(user_id):
+        await update.message.reply_text(
+            f"❌ کاربر <code>{user_id}</code> در دیتابیس یافت نشد.",
+            parse_mode="HTML",
+        )
+        return
+
+    if len(context.args) >= 2:
+        text = " ".join(context.args[1:])
+        try:
+            await context.bot.send_message(chat_id=int(user_id), text=text)
+            await update.message.reply_text(
+                msg("admin_message_sent", user_id=user_id),
+                parse_mode="HTML",
+            )
+        except Exception:
+            await update.message.reply_text(
+                msg("admin_message_failed", user_id=user_id),
+                parse_mode="HTML",
+            )
+        return
+
+    set_state(get_primary_admin_id(), STATE_ADMIN_USER_MESSAGE, target_user=user_id)
+    await update.message.reply_text(
+        f"💬 متن پیام برای کاربر <code>{user_id}</code> را ارسال کنید:",
+        parse_mode="HTML",
+    )

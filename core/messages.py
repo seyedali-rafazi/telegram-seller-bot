@@ -224,6 +224,13 @@ MESSAGES = {
         "تاریخ: {date}\n\n"
         "{sub_body}"
     ),
+    "bale_sub_rejected_user": (
+        "❌ درخواست اشتراک بله <code>{request_code}</code> رد شد.\n"
+        "شناسه بله: <code>{bale_id}</code>\n\n"
+        "در صورت اشتباه بودن شناسه، دوباره از منو «🔗 اشتراک بله» درخواست دهید."
+    ),
+    "admin_message_sent": "✅ پیام به کاربر <code>{user_id}</code> ارسال شد.",
+    "admin_message_failed": "❌ ارسال به کاربر <code>{user_id}</code> ناموفق بود.",
     "test_config_success": (
         "🧪 <b>ساب تست</b>\n\n"
         "یک‌بار برای هر کاربر\n\n"
