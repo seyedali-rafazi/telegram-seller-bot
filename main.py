@@ -16,7 +16,6 @@ from core.database.connection import close_db
 from core.config import get_admin_ids
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
-WEBHOOK_BASE_URL = os.getenv("WEBHOOK_URL") or os.getenv("TELEGRAM_WEBHOOK_URL")
 LISTEN_PORT = os.getenv("PORT") or os.getenv("TELEGRAM_LISTENING_PORT", "8443")
 
 logging.basicConfig(
@@ -28,6 +27,18 @@ logger = logging.getLogger(__name__)
 
 
 async def on_startup(app):
+    # 🔥 متد امن حذف آپدیت‌های معلق (Safe Flush):
+    # با این کار تمام پیام‌هایی که در زمان خاموش بودن ربات فرستاده شده‌اند کور می‌شوند
+    try:
+        updates = await app.bot.get_updates(offset=-1, timeout=1)
+        if updates:
+            await app.bot.get_updates(offset=updates[-1].update_id + 1, timeout=1)
+        logger.info(
+            "🗑️ Telegram pending updates successfully cleared via safe offset approach"
+        )
+    except Exception:
+        logger.exception("Failed to flush pending updates smoothly")
+
     await init_db()
     admins = get_admin_ids()
     if admins:
@@ -64,30 +75,16 @@ def main():
     )
 
     register_all_handlers(application)
-    logger.info("Telegram VPN bot started")
+    logger.info("Telegram VPN bot started in polling mode")
 
-    port = int(LISTEN_PORT)
-    webhook_url = WEBHOOK_BASE_URL
-    if webhook_url and not webhook_url.rstrip("/").endswith(BOT_TOKEN):
-        webhook_url = f"{webhook_url.rstrip('/')}/{BOT_TOKEN}"
-
+    # آپدیت‌های مجاز برای هندلرها
     allowed_updates = ["message", "edited_message", "callback_query"]
 
-    if webhook_url:
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path=BOT_TOKEN,
-            webhook_url=webhook_url,
-            drop_pending_updates=True,
-            allowed_updates=allowed_updates,
-        )
-    else:
-        logger.info("WEBHOOK_URL not set — running in polling mode")
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=allowed_updates,
-        )
+    # اجرای مستقیم روی حالت Polling بدون تداخل با وب‌هوک‌های قدیمی
+    application.run_polling(
+        drop_pending_updates=True,
+        allowed_updates=allowed_updates,
+    )
 
 
 if __name__ == "__main__":
